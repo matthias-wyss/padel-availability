@@ -429,6 +429,11 @@ def _default_browser_factory() -> _BrowserSession:
     return _PlaywrightBrowserSession()
 
 
+def default_browser_factory() -> _BrowserSession:
+    """Return the existing lazy Playwright browser session factory result."""
+    return _default_browser_factory()
+
+
 def _is_documented_browser_error(error: Exception) -> bool:
     if isinstance(error, (OSError, TimeoutError)):
         return True
