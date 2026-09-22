@@ -19,6 +19,25 @@ from .models import VerificationRun
 from .report import render_json_report, render_markdown_report
 
 
+class _PlaywrightSetupError(RuntimeError):
+    pass
+
+
+def _check_playwright_runtime() -> None:
+    __import__("playwright")
+    from playwright.sync_api import sync_playwright
+
+    try:
+        playwright = sync_playwright().start()
+    except Exception as error:
+        raise _PlaywrightSetupError("Playwright browser runtime is unavailable") from error
+    try:
+        if not Path(playwright.chromium.executable_path).is_file():
+            raise _PlaywrightSetupError("Chromium executable is not installed")
+    finally:
+        playwright.stop()
+
+
 def _positive_days(value: str) -> int:
     days = int(value)
     if days <= 0:
@@ -123,10 +142,11 @@ def _run_command(arguments: argparse.Namespace) -> None:
             sources = load_playtomic_sources(arguments.sources)
             if any(
                 source.transport == "browser_dom"
+                and source.status == "public"
                 and (arguments.location_id is None or source.location_id == arguments.location_id)
                 for source in sources
             ):
-                __import__("playwright")
+                _check_playwright_runtime()
             outcomes = collect_playtomic(
                 connection,
                 list_locations(connection),
@@ -163,8 +183,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(error.code)
     try:
         _run_command(arguments)
-    except ModuleNotFoundError as error:
-        if error.name != "playwright":
+    except (ModuleNotFoundError, _PlaywrightSetupError) as error:
+        if isinstance(error, ModuleNotFoundError) and error.name != "playwright":
             raise
         print(
             "error: Playwright is required for browser collection; run "

@@ -1,5 +1,7 @@
 import sqlite3
 import sys
+import types
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,7 @@ from padel_availability.availability import (
     AvailabilitySlot,
 )
 from padel_availability.collector import CollectionOutcome
-from padel_availability.connectors.playtomic import PlaytomicSource
+from padel_availability.connectors.playtomic import PlaytomicSource, load_playtomic_sources
 from padel_availability.database import save_availability_result
 from padel_availability.models import LocationRecord
 
@@ -297,3 +299,77 @@ def test_collect_playtomic_reports_missing_playwright_with_setup_guidance(
     error = capsys.readouterr().err
     assert "uv sync --group browser" in error
     assert "uv run playwright install chromium" in error
+
+
+def test_collect_playtomic_reports_missing_chromium_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[None] = []
+
+    def fake_collect(*_args: object, **_kwargs: object) -> tuple[CollectionOutcome, ...]:
+        calls.append(None)
+        return ()
+
+    driver = types.SimpleNamespace(
+        chromium=types.SimpleNamespace(executable_path=str(tmp_path / "missing-chromium")),
+        stop=lambda: None,
+    )
+    sync_api = types.ModuleType("playwright.sync_api")
+    sync_api.sync_playwright = lambda: types.SimpleNamespace(start=lambda: driver)  # type: ignore[attr-defined]
+    monkeypatch.setattr(cli, "collect_playtomic", fake_collect)
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+
+    assert cli.main(
+        [
+            "collect-playtomic",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/playtomic_sources.json"),
+        ]
+    ) == 2
+
+    assert calls == []
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error
+
+
+def test_collect_playtomic_does_not_require_playwright_for_unavailable_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    sources = tuple(
+        replace(source, status="unavailable")
+        if source.location_id == "padel-station"
+        else source
+        for source in load_playtomic_sources(ROOT / "data/playtomic_sources.json")
+    )
+
+    def unavailable_sources(_path: Path) -> tuple[PlaytomicSource, ...]:
+        return sources
+
+    monkeypatch.setattr(cli, "load_playtomic_sources", unavailable_sources)
+    monkeypatch.setitem(sys.modules, "playwright", None)
+
+    assert cli.main(
+        [
+            "collect-playtomic",
+            "--database",
+            str(database),
+            "--location-id",
+            "padel-station",
+        ]
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert "padel-station status=unavailable" in output
+    assert "error=public booking page is explicitly unavailable" in output
