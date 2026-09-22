@@ -622,6 +622,43 @@ def test_everness_connector_rejects_stale_grid_without_refresh() -> None:
     assert page.closed and context.closed
 
 
+def test_everness_connector_rejects_stale_real_script_grid(
+    fixture_browser: Any,
+) -> None:
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    first_payload = _browser_payload_html(fixture_browser, html)
+    second_payload = _browser_payload_html(
+        fixture_browser, html.replace("22 Sep 2026", "23 Sep 2026")
+    )
+    assert first_payload["date_label"] == "22 Sep 2026"
+    assert second_payload["date_label"] == "23 Sep 2026"
+    assert first_payload["grid_fingerprint"] == second_payload["grid_fingerprint"]
+
+    events: list[str] = []
+    connector, page, context = _everness_connector(
+        {first: [first_payload], second: [second_payload]},
+        events,
+        initial_date=first,
+        timeout_ms=100,
+    )
+
+    with pytest.raises(EvernessBrowserError, match="requested date"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=first,
+            window_end=date(2026, 9, 24),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
+    assert "click:#datepicker .day:21" in events
+    assert "click:#datepicker .day:22" in events
+
+
 def test_everness_connector_accepts_empty_grid_after_loading() -> None:
     events: list[str] = []
     first = date(2026, 9, 22)
