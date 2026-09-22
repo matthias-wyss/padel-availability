@@ -107,6 +107,7 @@ the default suite never imports or launches Chromium.
 
 - Modify: `pyproject.toml`
 - Modify: `src/padel_availability/connectors/playtomic.py`
+- Create: `src/padel_availability/connectors/playtomic_browser.py` with the observation model and pure normalizer
 - Modify: `data/playtomic_sources.json`
 - Modify: `tests/test_playtomic.py`
 - Create: `tests/test_playtomic_browser.py`
@@ -204,7 +205,7 @@ git commit -m "feat: add browser Playtomic source metadata"
 
 **Files:**
 
-- Create: `src/padel_availability/connectors/playtomic_browser.py`
+- Modify: `src/padel_availability/connectors/playtomic_browser.py`
 - Create: five `tests/fixtures/playtomic/dom/*.html` files
 - Modify: `tests/test_playtomic_browser.py`
 - Modify: `src/padel_availability/connectors/__init__.py`
