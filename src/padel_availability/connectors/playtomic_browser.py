@@ -1,17 +1,140 @@
+import re
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Literal, Sequence
+from datetime import date, datetime, time, timedelta
+from typing import Any, Literal, Protocol, Self, cast
 from zoneinfo import ZoneInfo
 
-from ..availability import AvailabilitySlot, local_to_utc
-from ..models import ModelError, _text
-from .playtomic import PlaytomicSourceError, _slot_key
-
+from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot, local_to_utc
+from ..models import LocationRecord, ModelError, _text  # pyright: ignore[reportPrivateUsage]
+from .playtomic import (  # pyright: ignore[reportPrivateUsage]
+    PlaytomicSource,
+    PlaytomicSourceError,
+    _slot_key,  # pyright: ignore[reportPrivateUsage]
+)
 
 BrowserSlotStatus = Literal["available", "unavailable", "unknown"]
 
 _SLOT_STATUSES = {"available", "unavailable", "unknown"}
 _ZURICH = ZoneInfo("Europe/Zurich")
+_BROWSER_TIMEOUT_MS = 15_000
+_CHROMIUM_ARGS = ("--disable-gpu", "--disable-dev-shm-usage")
+_VISIBLE_DOM_SCRIPT = """
+() => {
+  const body = document.body;
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    for (let current = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+  const heading = Array.from(body.querySelectorAll('h2')).some(element =>
+    visible(element) && /available courts|terrains disponibles/i.test(element.innerText || '')
+  );
+  const dates = Array.from(body.querySelectorAll('input[type="date"]'))
+    .filter(element => element.parentElement && visible(element.parentElement))
+    .map(element => element.value).filter(Boolean);
+  const slots = Array.from(body.querySelectorAll(
+    '[data-slot-id][data-tracking-property-time][data-tracking-property-duration]'
+  )).filter(visible).map(element => {
+    const row = element.closest('div.flex.border-b');
+    return {
+      external_id: element.getAttribute('data-slot-id'),
+      time: element.getAttribute('data-tracking-property-time'),
+      duration: element.getAttribute('data-tracking-property-duration'),
+      class: element.getAttribute('class') || '',
+      disabled: element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true',
+      court: row?.querySelector('div.shrink-0 .truncate')?.textContent?.trim() || null
+    };
+  });
+  return {view: heading ? 'booking' : 'unknown', date: dates[0] || '', slots, visible_text: body.innerText || ''};
+}
+"""
+_SELECT_DATE_SCRIPT = """
+value => {
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    for (let current = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+  for (const input of document.querySelectorAll('input[type="date"]')) {
+    if (!visible(input.parentElement)) continue;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    input.dispatchEvent(new Event('change', {bubbles: true}));
+  }
+  return true;
+}
+"""
+_NO_SLOT_MARKERS = (
+    "no available courts",
+    "no available slots",
+    "no availability",
+    "aucun terrain disponible",
+    "aucun créneau disponible",
+    "aucune disponibilité",
+    "pas de créneau disponible",
+)
+_UNAVAILABLE_MARKERS = (
+    "club is temporarily unavailable",
+    "service temporarily unavailable",
+    "ce club est temporairement indisponible",
+)
+_BLOCK_MARKERS = (
+    "captcha",
+    "verify you are human",
+    "log in to continue",
+    "login required",
+    "sign in to continue",
+    "access denied",
+    "accès refusé",
+)
+
+
+class PlaytomicBrowserError(PlaytomicSourceError):
+    """Raised when the visible public booking DOM cannot be observed safely."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message[:160])
+
+
+class PlaytomicBrowserUnavailable(PlaytomicBrowserError):
+    """Raised for an explicit public unavailable marker."""
+
+
+class _BrowserPage(Protocol):
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
+
+    def wait_for_timeout(self, timeout: int) -> None: ...
+
+    def evaluate(self, expression: str, arg: object = None) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _BrowserContext(Protocol):
+    def new_page(self) -> _BrowserPage: ...
+
+    def close(self) -> None: ...
+
+
+class _BrowserSession(Protocol):
+    def __enter__(self) -> Self: ...
+
+    def __exit__(self, *args: object) -> None: ...
+
+    def new_context(self) -> _BrowserContext: ...
+
+
+BrowserFactory = Callable[[], _BrowserSession]
 
 
 def _observation_timestamp(value: object, field: str) -> datetime:
@@ -48,8 +171,120 @@ class BrowserSlotObservation:
         ends_at = _observation_timestamp(self.ends_at, "ends_at")
         if ends_at <= starts_at:
             raise ModelError("ends_at must be after starts_at")
-        if not isinstance(self.status, str) or self.status not in _SLOT_STATUSES:
+        if self.status not in _SLOT_STATUSES:
             raise ModelError("status has invalid value")
+
+
+def _dom_mapping(value: object, field: str = "visible DOM") -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise PlaytomicBrowserError(f"{field} has an invalid shape")
+    return cast(Mapping[str, object], value)
+
+
+def _dom_text(mapping: Mapping[str, object], field: str) -> str:
+    value = mapping.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise PlaytomicBrowserError(f"visible DOM is missing {field}")
+    return value.strip()
+
+
+def _local_timestamp(local_date: date, local_time: time, field: str) -> str:
+    wall_time = datetime.combine(local_date, local_time)
+    first = wall_time.replace(tzinfo=_ZURICH, fold=0)
+    second = wall_time.replace(tzinfo=_ZURICH, fold=1)
+    if first.utcoffset() != second.utcoffset():
+        raise PlaytomicBrowserError(f"{field} is ambiguous in Europe/Zurich")
+    return first.isoformat(timespec="seconds")
+
+
+def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation | None:
+    slot = _dom_mapping(item, "visible slot")
+    external_id = _dom_text(slot, "external_id")
+    local_time_text = _dom_text(slot, "time")
+    duration_text = _dom_text(slot, "duration")
+    classes = slot.get("class")
+    disabled = slot.get("disabled")
+    court_label = slot.get("court")
+    if not isinstance(classes, str):
+        raise PlaytomicBrowserError("visible slot is missing class state")
+    if not isinstance(disabled, bool):
+        raise PlaytomicBrowserError("visible slot has an invalid disabled state")
+    if court_label is not None and (not isinstance(court_label, str) or not court_label.strip()):
+        raise PlaytomicBrowserError("visible slot has an invalid court label")
+    if disabled or "bg-white" not in classes:
+        return None
+
+    match = re.fullmatch(r"([0-9]{1,2})(?::([0-9]{2}))?\s*([AP]M)", local_time_text.upper())
+    if match is None:
+        raise PlaytomicBrowserError("visible slot has an ambiguous time")
+    hour = int(match.group(1))
+    minute = int(match.group(2) or "0")
+    if not 1 <= hour <= 12 or not 0 <= minute <= 59:
+        raise PlaytomicBrowserError("visible slot has an ambiguous time")
+    if match.group(3) == "PM" and hour != 12:
+        hour += 12
+    if match.group(3) == "AM" and hour == 12:
+        hour = 0
+    parsed_time = time(hour, minute)
+    try:
+        duration = int(duration_text)
+    except ValueError as error:
+        raise PlaytomicBrowserError("visible slot has an invalid duration") from error
+    if duration <= 0:
+        raise PlaytomicBrowserError("visible slot has an invalid duration")
+
+    start_wall = datetime.combine(requested_date, parsed_time)
+    end_wall = start_wall + timedelta(minutes=duration)
+    starts_at = _local_timestamp(start_wall.date(), start_wall.time(), "starts_at")
+    ends_at = _local_timestamp(end_wall.date(), end_wall.time(), "ends_at")
+    try:
+        return BrowserSlotObservation(
+            external_id,
+            court_label,
+            starts_at,
+            ends_at,
+            "available",
+        )
+    except ModelError as error:
+        raise PlaytomicBrowserError("visible slot failed validation") from error
+
+
+def parse_visible_dom(payload: object, requested_date: date) -> tuple[BrowserSlotObservation, ...]:
+    """Parse the small visible-DOM payload returned by Playwright."""
+    dom = _dom_mapping(payload)
+    visible_text = dom.get("visible_text")
+    if not isinstance(visible_text, str):
+        raise PlaytomicBrowserError("visible DOM is missing visible text")
+    normalized_text = " ".join(visible_text.split()).casefold()
+    if any(marker in normalized_text for marker in _BLOCK_MARKERS):
+        raise PlaytomicBrowserError("public page is blocked by login or CAPTCHA")
+    if any(marker in normalized_text for marker in _UNAVAILABLE_MARKERS):
+        raise PlaytomicBrowserUnavailable("public page is explicitly unavailable")
+    if dom.get("view") != "booking":
+        raise PlaytomicBrowserError("visible booking view was not found")
+    if _dom_text(dom, "date") != requested_date.isoformat():
+        raise PlaytomicBrowserError("visible date control did not select the requested date")
+    raw_slots_value = dom.get("slots")
+    if not isinstance(raw_slots_value, list):
+        raise PlaytomicBrowserError("visible DOM is missing slot cards")
+    raw_slots = cast(list[object], raw_slots_value)
+    observations = tuple(
+        observation
+        for item in raw_slots
+        if (observation := _parse_visible_slot(item, requested_date)) is not None
+    )
+    if observations:
+        return observations
+    if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
+        return ()
+    raise PlaytomicBrowserError("visible booking view has no explicit availability state")
+
+
+def extract_browser_observations(
+    page: _BrowserPage, requested_date: date
+) -> tuple[BrowserSlotObservation, ...]:
+    payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
+    return parse_visible_dom(payload, requested_date)
 
 
 def parse_browser_observations(
@@ -65,7 +300,7 @@ def parse_browser_observations(
 
     slots: dict[str, AvailabilitySlot] = {}
     for index, observation in enumerate(observations):
-        if not isinstance(observation, BrowserSlotObservation):
+        if type(observation) is not BrowserSlotObservation:
             raise PlaytomicSourceError(f"observation {index} is invalid")
         starts_local = _observation_timestamp(observation.starts_at, "starts_at")
         local_date = starts_local.astimezone(_ZURICH).date()
@@ -107,3 +342,186 @@ def parse_browser_observations(
             key=lambda slot: (slot.starts_at, slot.ends_at, slot.court_label or "", slot.slot_key),
         )
     )
+
+
+class _PlaywrightBrowserSession:
+    def __init__(self) -> None:
+        self._playwright: Any = None
+        self._browser: Any = None
+
+    def __enter__(self) -> Self:
+        from playwright.sync_api import sync_playwright
+
+        self._playwright = sync_playwright().start()
+        try:
+            self._browser = self._playwright.chromium.launch(
+                headless=True, args=list(_CHROMIUM_ARGS)
+            )
+        except Exception:
+            self._playwright.stop()
+            self._playwright = None
+            raise
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        try:
+            if self._browser is not None:
+                self._browser.close()
+        finally:
+            if self._playwright is not None:
+                self._playwright.stop()
+
+    def new_context(self) -> _BrowserContext:
+        if self._browser is None:
+            raise PlaytomicBrowserError("browser session is not running")
+        return cast(_BrowserContext, self._browser.new_context())
+
+
+def _default_browser_factory() -> _BrowserSession:
+    return _PlaywrightBrowserSession()
+
+
+def _payload_is_ready(payload: object, requested_date: date) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    dom = cast(Mapping[str, object], payload)
+    visible_text = dom.get("visible_text")
+    if isinstance(visible_text, str):
+        normalized_text = " ".join(visible_text.split()).casefold()
+        if any(marker in normalized_text for marker in _BLOCK_MARKERS + _UNAVAILABLE_MARKERS):
+            return True
+    if dom.get("view") != "booking" or dom.get("date") != requested_date.isoformat():
+        return False
+    slots = dom.get("slots")
+    if isinstance(slots, list) and slots:
+        return True
+    if isinstance(visible_text, str):
+        normalized_text = " ".join(visible_text.split()).casefold()
+        return any(marker in normalized_text for marker in _NO_SLOT_MARKERS)
+    return False
+
+
+def _wait_for_visible_dom(page: _BrowserPage, requested_date: date, timeout_ms: int) -> object:
+    attempts = max(1, timeout_ms // 100)
+    payload: object = None
+    for _ in range(attempts):
+        payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
+        if _payload_is_ready(payload, requested_date):
+            return payload
+        page.wait_for_timeout(100)
+    raise PlaytomicBrowserError("timed out waiting for the visible booking view")
+
+
+def _unavailable_result(
+    source_url: str,
+    location_id: str,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+) -> AvailabilityResult:
+    run = AvailabilityRun(
+        run_id,
+        location_id,
+        "playtomic_browser",
+        source_url,
+        window_start.isoformat(),
+        window_end.isoformat(),
+        (window_end - window_start).days,
+        collected_at,
+        "unavailable",
+        "public booking page is explicitly unavailable",
+    )
+    return AvailabilityResult(run, ())
+
+
+class PlaytomicBrowserConnector:
+    def __init__(
+        self,
+        sources: Sequence[PlaytomicSource],
+        *,
+        browser_factory: BrowserFactory = _default_browser_factory,
+        timeout_ms: int = _BROWSER_TIMEOUT_MS,
+    ) -> None:
+        self._sources = {source.location_id: source for source in sources}
+        self._browser_factory = browser_factory
+        self._timeout_ms = timeout_ms
+
+    def collect(
+        self,
+        location: LocationRecord,
+        *,
+        run_id: str,
+        window_start: date,
+        window_end: date,
+        collected_at: str,
+    ) -> AvailabilityResult:
+        if window_end <= window_start:
+            raise PlaytomicSourceError("requested date window is invalid")
+        location_id = location.location_id
+        source = self._sources.get(location_id)
+        if source is None:
+            raise PlaytomicSourceError("no source metadata for location")
+        if source.transport != "browser_dom":
+            raise PlaytomicSourceError("source is not configured for browser DOM transport")
+        source_url = source.booking_url
+        if source.status == "unavailable":
+            return _unavailable_result(
+                source_url, location_id, run_id, window_start, window_end, collected_at
+            )
+
+        observations: list[BrowserSlotObservation] = []
+        try:
+            with self._browser_factory() as browser:
+                context = browser.new_context()
+                try:
+                    page = context.new_page()
+                    try:
+                        page.goto(source_url, wait_until="commit", timeout=self._timeout_ms)
+                        current_date = window_start
+                        while current_date < window_end:
+                            page.evaluate(_SELECT_DATE_SCRIPT, current_date.isoformat())
+                            payload = _wait_for_visible_dom(page, current_date, self._timeout_ms)
+                            try:
+                                observations.extend(parse_visible_dom(payload, current_date))
+                            except PlaytomicBrowserUnavailable:
+                                return _unavailable_result(
+                                    source_url,
+                                    location_id,
+                                    run_id,
+                                    window_start,
+                                    window_end,
+                                    collected_at,
+                                )
+                            current_date += timedelta(days=1)
+                    finally:
+                        page.close()
+                finally:
+                    context.close()
+        except PlaytomicBrowserError:
+            raise
+        except PlaytomicSourceError:
+            raise
+        except Exception as error:
+            raise PlaytomicSourceError("browser navigation or extraction failed"[:160]) from error
+
+        slots = parse_browser_observations(
+            tuple(observations),
+            location_id=location_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        run = AvailabilityRun(
+            run_id,
+            location_id,
+            "playtomic_browser",
+            source_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            "success",
+            None,
+        )
+        return AvailabilityResult(run, slots)
