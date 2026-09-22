@@ -266,6 +266,39 @@ def test_airpad_collection_runs_all_four_sites(tmp_path: Path) -> None:
         connection.close()
 
 
+def test_airpad_collection_rejects_missing_catalog_location(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = tuple(
+        location
+        for location in four_airpad_locations()
+        if location.location_id != "airpad-meyrin"
+    )
+
+    try:
+        with pytest.raises(
+            ValueError,
+            match="catalog is missing AIRPAD locations: airpad-meyrin",
+        ):
+            collect_airpad(connection, locations, four_airpad_sources())
+    finally:
+        connection.close()
+
+
+def test_airpad_collection_rejects_unknown_location_id(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+
+    try:
+        with pytest.raises(ValueError, match="unknown AIRPAD location: padel-station"):
+            collect_airpad(
+                connection,
+                four_airpad_locations(),
+                four_airpad_sources(),
+                location_id="padel-station",
+            )
+    finally:
+        connection.close()
+
+
 def test_airpad_collection_selects_one_site_and_uses_zurich_window(tmp_path: Path) -> None:
     connection = ready_airpad_database(tmp_path)
     locations = four_airpad_locations()
@@ -499,6 +532,53 @@ def test_airpad_browser_opens_once_and_closes_after_collection(tmp_path: Path) -
             browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
         )
         assert lifecycle == ["open", "close"]
+    finally:
+        connection.close()
+
+
+def test_airpad_browser_startup_error_is_persisted_for_each_site(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise AirpadBrowserError("browser startup failed")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                del location, run_id, window_start, window_end, collected_at
+                raise AssertionError("collect should not run after browser startup failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        assert lifecycle == ["open", "close"]
+        assert [outcome.location_id for outcome in outcomes] == list(AIRPAD_IDS)
+        assert [outcome.status for outcome in outcomes] == ["error"] * 4
+        assert [outcome.error for outcome in outcomes] == ["browser startup failed"] * 4
+        assert len(list_availability_runs(connection)) == 4
     finally:
         connection.close()
 

@@ -560,6 +560,74 @@ def test_collect_airpad_reports_outcomes(
     ]
 
 
+def test_collect_airpad_can_select_one_location(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[tuple[frozenset[str], int, str | None]] = []
+
+    def fake_collect(
+        connection: sqlite3.Connection,
+        locations: tuple[LocationRecord, ...],
+        sources: tuple[AirpadSource, ...],
+        *,
+        horizon_days: int,
+        location_id: str | None,
+    ) -> tuple[CollectionOutcome, ...]:
+        del connection
+        calls.append(
+            (
+                frozenset(source.location_id for source in sources),
+                horizon_days,
+                location_id,
+            )
+        )
+        assert location_id == "airpad-meyrin"
+        return (
+            CollectionOutcome(
+                "airpad-meyrin",
+                "run-meyrin",
+                "success",
+                2,
+                "2030-01-02",
+                "2030-01-16",
+                None,
+            ),
+        )
+
+    monkeypatch.setattr(cli, "collect_airpad", fake_collect)
+    monkeypatch.setattr(cli, "_check_playwright_runtime", lambda: None)
+
+    assert cli.main(
+        [
+            "collect-airpad",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/airpad_sources.json"),
+            "--location-id",
+            "airpad-meyrin",
+        ]
+    ) == 0
+
+    assert len(calls) == 1
+    source_ids, horizon_days, location_id = calls[0]
+    assert source_ids == {
+        "airpad-la-praille",
+        "airpad-les-acacias",
+        "airpad-meyrin",
+        "airpad-plan-les-ouates",
+    }
+    assert (horizon_days, location_id) == (14, "airpad-meyrin")
+    assert capsys.readouterr().out.splitlines() == [
+        ("airpad-meyrin status=success slots=2 window=2030-01-02..2030-01-16 "
+         "error=none last_success=none"),
+    ]
+
+
 def test_collect_airpad_rejects_non_positive_days(tmp_path: Path) -> None:
     assert cli.main(
         [
