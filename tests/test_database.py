@@ -7,12 +7,21 @@ import pytest
 from padel_availability.database import (
     connect,
     create_verification_run,
+    get_availability_snapshot,
     initialize,
     insert_candidates,
     list_candidate_matches,
+    list_availability_runs,
+    list_availability_slots,
     list_locations,
     record_candidate_match,
+    save_availability_result,
     upsert_location,
+)
+from padel_availability.availability import (
+    AvailabilityResult,
+    AvailabilityRun,
+    AvailabilitySlot,
 )
 from padel_availability.models import (
     CandidateEntry,
@@ -61,6 +70,79 @@ def location_record() -> LocationRecord:
         booking_url="https://example.test/book",
         booking_platform="ExampleBook",
     )
+
+
+def ready_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "inventory.sqlite3")
+    initialize(connection)
+    insert_candidates(
+        connection,
+        (CandidateEntry("example", "Example Padel", "Geneva", "2", "club", "public"),),
+    )
+    upsert_location(connection, replace(location_record(), location_id="padel-station"))
+    return connection
+
+
+def successful_result(
+    *, run_id: str = "run-success", collected_at: str = "2026-09-22T08:00:00Z"
+) -> AvailabilityResult:
+    run = AvailabilityRun(
+        run_id,
+        "padel-station",
+        "playtomic",
+        "https://example.test/slots",
+        "2026-09-23",
+        "2026-10-07",
+        14,
+        collected_at,
+        "success",
+        None,
+    )
+    return AvailabilityResult(
+        run,
+        (
+            AvailabilitySlot(
+                run_id,
+                "padel-station",
+                "slot-available",
+                "external-1",
+                "Court 1",
+                "2026-09-23T18:00:00Z",
+                "2026-09-23T19:00:00Z",
+                "Europe/Zurich",
+                "available",
+            ),
+            AvailabilitySlot(
+                run_id,
+                "padel-station",
+                "slot-unavailable",
+                None,
+                "Court 2",
+                "2026-09-23T19:00:00Z",
+                "2026-09-23T20:00:00Z",
+                "Europe/Zurich",
+                "unavailable",
+            ),
+        ),
+    )
+
+
+def failed_result(
+    *, run_id: str = "run-error", collected_at: str = "2026-09-22T09:00:00Z"
+) -> AvailabilityResult:
+    run = AvailabilityRun(
+        run_id,
+        "padel-station",
+        "playtomic",
+        "https://example.test/slots",
+        "2026-09-23",
+        "2026-10-07",
+        14,
+        collected_at,
+        "error",
+        "Playtomic unavailable",
+    )
+    return AvailabilityResult(run, ())
 
 
 def test_schema_and_evidence_round_trip_after_reopen(tmp_path: Path) -> None:
@@ -262,3 +344,89 @@ def test_reassigning_candidate_removes_old_location_association(tmp_path: Path) 
         )
     finally:
         connection.close()
+
+
+def test_availability_result_round_trip_after_reopen(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    result = successful_result()
+    save_availability_result(connection, result)
+    connection.close()
+
+    reopened = connect(tmp_path / "inventory.sqlite3")
+    try:
+        assert list_availability_runs(reopened) == (result.run,)
+        assert list_availability_slots(reopened, result.run.run_id) == result.slots
+    finally:
+        reopened.close()
+
+
+def test_availability_lists_are_deterministically_ordered(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    first = successful_result(run_id="run-b", collected_at="2026-09-22T08:00:00Z")
+    second = successful_result(run_id="run-a", collected_at="2026-09-22T08:00:00Z")
+    save_availability_result(connection, first)
+    save_availability_result(connection, second)
+
+    assert list_availability_runs(connection) == (second.run, first.run)
+    assert tuple(slot.slot_key for slot in list_availability_slots(connection, "run-a")) == (
+        "slot-available",
+        "slot-unavailable",
+    )
+    connection.close()
+
+
+def test_failed_latest_run_exposes_previous_success_as_stale(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    save_availability_result(connection, successful_result())
+    save_availability_result(connection, failed_result())
+
+    snapshot = get_availability_snapshot(connection, "padel-station")
+
+    assert snapshot is not None
+    assert snapshot.status == "stale"
+    assert snapshot.slots[0].status == "available"
+    assert snapshot.latest_run.status == "error"
+    assert snapshot.last_success_at == "2026-09-22T08:00:00Z"
+    connection.close()
+
+
+def test_failed_run_without_success_has_empty_current_status(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    save_availability_result(connection, failed_result())
+
+    snapshot = get_availability_snapshot(connection, "padel-station")
+
+    assert snapshot is not None
+    assert snapshot.status == "error"
+    assert snapshot.slots == ()
+    assert snapshot.last_success_at is None
+    connection.close()
+
+
+def test_deleting_location_cascades_availability_rows(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    save_availability_result(connection, successful_result())
+
+    connection.execute(
+        "UPDATE candidate_entries SET matched_location_id = NULL WHERE candidate_id = ?",
+        ("example",),
+    )
+    connection.execute("DELETE FROM locations WHERE location_id = ?", ("padel-station",))
+    connection.commit()
+
+    assert connection.execute("SELECT COUNT(*) FROM availability_runs").fetchone()[0] == 0
+    assert connection.execute("SELECT COUNT(*) FROM availability_slots").fetchone()[0] == 0
+    connection.close()
+
+
+def test_duplicate_slot_key_rejects_result_atomically(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    result = successful_result()
+    duplicate = replace(result, slots=(result.slots[0], result.slots[0]))
+
+    with pytest.raises(sqlite3.IntegrityError):
+        save_availability_result(connection, duplicate)
+
+    assert connection.execute("SELECT COUNT(*) FROM availability_runs").fetchone()[0] == 0
+    assert connection.execute("SELECT COUNT(*) FROM availability_slots").fetchone()[0] == 0
+    connection.close()

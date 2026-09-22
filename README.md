@@ -2,9 +2,9 @@
 
 Verified padel club catalog for the Geneva to Lausanne region.
 
-This first slice is a read-only inventory catalog, not an automatic booking
-service. It does not make reservations or payments, and availability scrapers
-or a web UI are not included yet.
+This first slice is a read-only inventory catalog with manual Playtomic
+availability collection, not an automatic booking service. It does not make
+reservations or payments.
 
 ## Development
 
@@ -55,6 +55,26 @@ rg -n '^## Missing or unknown facts|^### Unresolved candidates|Inconnu|not_confi
 
 Use a `.json` output path for a machine-readable report.
 
+## Manual Availability Collection
+
+Collect the public Playtomic availability snapshot manually:
+
+```bash
+uv run padel-availability collect-playtomic \
+  --database var/catalog.sqlite3 \
+  --sources data/playtomic_sources.json \
+  --days 14
+```
+
+This command is read-only against Playtomic and uses public sources only. It
+is manual and sequential: it does not book courts, use credentials, or run in
+the background. Each outcome is persisted locally. An `error` or
+`unavailable` outcome keeps the previous successful snapshot as stale rather
+than replacing its slots.
+
+`reports/inventory.md` remains the static inventory report; it is not yet an
+availability report.
+
 ## Data Boundaries
 
 - Source freshness is explicit: `verified_at` identifies the catalog pass and
@@ -62,6 +82,6 @@ Use a `.json` output path for a machine-readable report.
   review when a source may have changed; the catalog does not imply live data.
 - Unknown facts remain `Inconnu` rather than being inferred from candidate
   text, directories, or neighboring locations.
-- The CLI reads local JSON and writes only the local SQLite/report artifacts. It
-  performs no network automation and requires no credentials, booking account,
-  CAPTCHA bypass, payment, or personal data.
+- Inventory commands read local JSON and write only local SQLite/report
+  artifacts. Manual collection reads public availability sources and requires
+  no credentials, booking account, CAPTCHA bypass, payment, or personal data.

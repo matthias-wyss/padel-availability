@@ -5,10 +5,25 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from .database import connect, initialize, list_candidate_matches, list_locations
+from .collector import collect_playtomic
+from .connectors.playtomic import load_playtomic_sources
+from .database import (
+    connect,
+    get_availability_snapshot,
+    initialize,
+    list_candidate_matches,
+    list_locations,
+)
 from .inventory import build_catalog, import_candidates, load_candidates, load_locations
 from .models import VerificationRun
 from .report import render_json_report, render_markdown_report
+
+
+def _positive_days(value: str) -> int:
+    days = int(value)
+    if days <= 0:
+        raise argparse.ArgumentTypeError("days must be positive")
+    return days
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -34,6 +49,16 @@ def _parser() -> argparse.ArgumentParser:
     report_command = commands.add_parser("report", help="render a persisted catalog report")
     report_command.add_argument("--database", required=True, type=Path)
     report_command.add_argument("--output", required=True, type=Path)
+
+    collect_command = commands.add_parser(
+        "collect-playtomic", help="collect public Playtomic availability manually"
+    )
+    collect_command.add_argument("--database", required=True, type=Path)
+    collect_command.add_argument(
+        "--sources", type=Path, default=Path("data/playtomic_sources.json")
+    )
+    collect_command.add_argument("--location-id")
+    collect_command.add_argument("--days", type=_positive_days, default=14)
     return parser
 
 
@@ -93,6 +118,24 @@ def _run_command(arguments: argparse.Namespace) -> None:
                 report = render_markdown_report(locations, matches, run)
             arguments.output.parent.mkdir(parents=True, exist_ok=True)
             arguments.output.write_text(report, encoding="utf-8")
+            return
+        if arguments.command == "collect-playtomic":
+            outcomes = collect_playtomic(
+                connection,
+                list_locations(connection),
+                load_playtomic_sources(arguments.sources),
+                horizon_days=arguments.days,
+                location_id=arguments.location_id,
+            )
+            for outcome in outcomes:
+                error = " ".join((outcome.error or "none").split())[:160]
+                snapshot = get_availability_snapshot(connection, outcome.location_id)
+                last_success = snapshot.last_success_at if snapshot is not None else None
+                print(
+                    f"{outcome.location_id} status={outcome.status} slots={outcome.slot_count} "
+                    f"window={outcome.window_start}..{outcome.window_end} error={error} "
+                    f"last_success={last_success or 'none'}"
+                )
             return
         raise ValueError(f"unsupported command: {arguments.command}")
     finally:

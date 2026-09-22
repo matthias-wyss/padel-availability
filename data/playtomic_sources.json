@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "sources": [
+    {
+      "location_id": "padel-station",
+      "booking_url": "https://playtomic.com/fr/clubs/padel-station1",
+      "availability_url_template": null,
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "unavailable"
+    },
+    {
+      "location_id": "gva-palexpo",
+      "booking_url": "https://playtomic.com/clubs/gva-padel-mp-sports-sa",
+      "availability_url_template": null,
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "unavailable"
+    },
+    {
+      "location_id": "padel-parc-etoy",
+      "booking_url": "https://playtomic.com/clubs/padel-parc-etoy",
+      "availability_url_template": null,
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "unavailable"
+    },
+    {
+      "location_id": "padel-parc-preverenges",
+      "booking_url": "https://playtomic.com/clubs/padel-parc-preverenges",
+      "availability_url_template": null,
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "unavailable"
+    },
+    {
+      "location_id": "vaudoise-arena",
+      "booking_url": "https://playtomic.io/vaudoise-arena/53b5aaf2-7449-4691-96f8-a582ce37144b?q=PADEL~2025-03-17~~~",
+      "availability_url_template": null,
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "unavailable"
+    }
+  ]
+}

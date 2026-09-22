@@ -3,6 +3,12 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Sequence
 
+from .availability import (
+    AvailabilityResult,
+    AvailabilityRun,
+    AvailabilitySlot,
+    AvailabilitySnapshot,
+)
 from .models import (
     CandidateEntry,
     CandidateMatch,
@@ -49,6 +55,32 @@ def initialize(connection: sqlite3.Connection) -> None:
             first_verified_at TEXT,
             last_verified_at TEXT,
             notes TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS availability_runs (
+            run_id TEXT PRIMARY KEY,
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            connector TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            window_start TEXT NOT NULL,
+            window_end TEXT NOT NULL,
+            horizon_days INTEGER NOT NULL CHECK (horizon_days > 0),
+            collected_at TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('success', 'error', 'unavailable')),
+            error TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS availability_slots (
+            run_id TEXT NOT NULL REFERENCES availability_runs(run_id) ON DELETE CASCADE,
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            slot_key TEXT NOT NULL,
+            external_id TEXT,
+            court_label TEXT,
+            starts_at TEXT NOT NULL,
+            ends_at TEXT NOT NULL,
+            timezone TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('available', 'unavailable', 'unknown')),
+            PRIMARY KEY (run_id, slot_key)
         );
 
         CREATE TABLE IF NOT EXISTS court_groups (
@@ -378,6 +410,173 @@ def list_locations(connection: sqlite3.Connection) -> tuple[LocationRecord, ...]
         "SELECT * FROM locations ORDER BY municipality, canonical_name"
     ).fetchall()
     return tuple(_location_from_row(connection, row) for row in rows)
+
+
+def _availability_run_from_row(row: sqlite3.Row) -> AvailabilityRun:
+    return AvailabilityRun(
+        row["run_id"],
+        row["location_id"],
+        row["connector"],
+        row["source_url"],
+        row["window_start"],
+        row["window_end"],
+        row["horizon_days"],
+        row["collected_at"],
+        row["status"],
+        row["error"],
+    )
+
+
+def _availability_slot_from_row(row: sqlite3.Row) -> AvailabilitySlot:
+    return AvailabilitySlot(
+        row["run_id"],
+        row["location_id"],
+        row["slot_key"],
+        row["external_id"],
+        row["court_label"],
+        row["starts_at"],
+        row["ends_at"],
+        row["timezone"],
+        row["status"],
+    )
+
+
+def _save_availability_result(connection: sqlite3.Connection, result: AvailabilityResult) -> None:
+    run = result.run
+    connection.execute(
+        """
+        INSERT INTO availability_runs (
+            run_id, location_id, connector, source_url, window_start, window_end,
+            horizon_days, collected_at, status, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run.run_id,
+            run.location_id,
+            run.connector,
+            run.source_url,
+            run.window_start,
+            run.window_end,
+            run.horizon_days,
+            run.collected_at,
+            run.status,
+            run.error,
+        ),
+    )
+    connection.executemany(
+        """
+        INSERT INTO availability_slots (
+            run_id, location_id, slot_key, external_id, court_label,
+            starts_at, ends_at, timezone, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                slot.run_id,
+                slot.location_id,
+                slot.slot_key,
+                slot.external_id,
+                slot.court_label,
+                slot.starts_at,
+                slot.ends_at,
+                slot.timezone,
+                slot.status,
+            )
+            for slot in result.slots
+        ],
+    )
+
+
+def save_availability_result(
+    connection: sqlite3.Connection,
+    result: AvailabilityResult,
+    *,
+    commit: bool = True,
+) -> None:
+    if commit:
+        with connection:
+            _save_availability_result(connection, result)
+        return
+
+    connection.execute("SAVEPOINT save_availability_result")
+    try:
+        _save_availability_result(connection, result)
+    except BaseException:
+        connection.execute("ROLLBACK TO save_availability_result")
+        connection.execute("RELEASE save_availability_result")
+        raise
+    connection.execute("RELEASE save_availability_result")
+
+
+def list_availability_runs(
+    connection: sqlite3.Connection, location_id: str | None = None
+) -> tuple[AvailabilityRun, ...]:
+    if location_id is None:
+        rows = connection.execute(
+            "SELECT * FROM availability_runs ORDER BY collected_at, run_id"
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            "SELECT * FROM availability_runs WHERE location_id = ? ORDER BY collected_at, run_id",
+            (location_id,),
+        ).fetchall()
+    return tuple(_availability_run_from_row(row) for row in rows)
+
+
+def list_availability_slots(
+    connection: sqlite3.Connection, run_id: str
+) -> tuple[AvailabilitySlot, ...]:
+    rows = connection.execute(
+        "SELECT * FROM availability_slots WHERE run_id = ? ORDER BY slot_key",
+        (run_id,),
+    ).fetchall()
+    return tuple(_availability_slot_from_row(row) for row in rows)
+
+
+def get_availability_snapshot(
+    connection: sqlite3.Connection, location_id: str
+) -> AvailabilitySnapshot | None:
+    latest_row = connection.execute(
+        """
+        SELECT * FROM availability_runs
+        WHERE location_id = ?
+        ORDER BY collected_at DESC, run_id DESC
+        LIMIT 1
+        """,
+        (location_id,),
+    ).fetchone()
+    if latest_row is None:
+        return None
+
+    latest_run = _availability_run_from_row(latest_row)
+    successful_row = connection.execute(
+        """
+        SELECT * FROM availability_runs
+        WHERE location_id = ? AND status = 'success'
+        ORDER BY collected_at DESC, run_id DESC
+        LIMIT 1
+        """,
+        (location_id,),
+    ).fetchone()
+    successful_run = (
+        _availability_run_from_row(successful_row) if successful_row is not None else None
+    )
+    if latest_run.status == "success":
+        slots = list_availability_slots(connection, latest_run.run_id)
+        status = "success"
+    elif successful_run is not None:
+        slots = list_availability_slots(connection, successful_run.run_id)
+        status = "stale"
+    else:
+        slots = ()
+        status = latest_run.status
+    return AvailabilitySnapshot(
+        location_id,
+        latest_run,
+        slots,
+        status,
+        successful_run.collected_at if successful_run is not None else None,
+    )
 
 
 def record_candidate_match(

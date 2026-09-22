@@ -80,6 +80,16 @@ def location_with_candidate(candidate_id: str) -> LocationRecord:
                 evidence="The official page describes public access.",
                 confidence="probable",
             ),
+            SourceEvidence(
+                url="https://example.test/location",
+                source_type="official",
+                title="Example location",
+                checked_at="2026-09-21T00:00:00Z",
+                fact_key="location.courts",
+                relation="supports",
+                evidence="The official page lists the courts.",
+                confidence="probable",
+            ),
         ),
         notes="",
     )
