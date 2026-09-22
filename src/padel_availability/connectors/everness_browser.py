@@ -42,7 +42,19 @@ _EVERNESS_MONTHS = {
     "Nov": 11,
     "Dec": 12,
 }
-_EVERNESS_BLOCK_MARKERS = ("captcha", "log in", "login", "sign in", "access denied")
+_EVERNESS_BLOCK_MARKERS = (
+    "captcha",
+    "log in",
+    "login",
+    "sign in",
+    "sign-in",
+    "authenticate",
+    "authentication required",
+    "connexion",
+    "se connecter",
+    "access denied",
+    "accès refusé",
+)
 _EVERNESS_UNAVAILABLE_MARKERS = (
     "club is temporarily unavailable",
     "service temporarily unavailable",
@@ -88,6 +100,16 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
   }
   const visibleText = body.innerText || '';
   const normalizedText = visibleText.replace(/\s+/g, ' ').trim().toLowerCase();
+  const authenticationMarker = /captcha|log[\s-]?in|login|sign[\s-]?in|authenticate|authentication required|connexion|se connecter|access denied|accès refusé/i;
+  const authenticationVisible = authenticationMarker.test(normalizedText) ||
+    Array.from(body.querySelectorAll(
+      'input[type="password"], form, dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], [class*="auth"], [class*="login"], [class*="signin"], [class*="sign-in"], [class*="connexion"], [class*="overlay"]'
+    )).some(element => {
+      if (!visible(element)) return false;
+      const attributes = `${element.id || ''} ${String(element.className || '')}`;
+      return element.matches('input[type="password"]') ||
+        authenticationMarker.test(text(element)) || authenticationMarker.test(attributes);
+    });
   const bodyLoading = visible(body) &&
     (body.classList.contains('loading') || body.getAttribute('aria-busy') === 'true');
   const loading = bodyLoading || normalizedText.includes('loading') || normalizedText.includes('chargement') ||
@@ -110,6 +132,7 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
     rows,
     grid_fingerprint: gridFingerprint,
     loading,
+    authentication_visible: authenticationVisible,
     visible_text: visibleText
   };
 }
@@ -134,6 +157,13 @@ def _dom_text(mapping: Mapping[str, object], field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise EvernessBrowserError(f"visible DOM is missing {field}")
     return value.strip()
+
+
+def _dom_authentication_visible(dom: Mapping[str, object]) -> bool:
+    value = dom.get("authentication_visible", False)
+    if not isinstance(value, bool):
+        raise EvernessBrowserError("visible DOM has an invalid authentication state")
+    return value
 
 
 def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
@@ -191,7 +221,9 @@ def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSl
     normalized_text = " ".join(visible_text.split()).casefold()
     if any(marker in normalized_text for marker in _EVERNESS_UNAVAILABLE_MARKERS):
         raise EvernessBrowserError("public Everness page is explicitly unavailable")
-    if any(marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS):
+    if _dom_authentication_visible(dom) or any(
+        marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS
+    ):
         raise EvernessBrowserError("public Everness page is blocked by login or CAPTCHA")
     loading = dom.get("loading")
     if not isinstance(loading, bool):
@@ -336,7 +368,9 @@ def _everness_payload_text(payload: object) -> str:
     normalized_text = " ".join(visible_text.split()).casefold()
     if any(marker in normalized_text for marker in _EVERNESS_UNAVAILABLE_MARKERS):
         raise EvernessBrowserError("public Everness page is explicitly unavailable")
-    if any(marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS):
+    if _dom_authentication_visible(dom) or any(
+        marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS
+    ):
         raise EvernessBrowserError("public Everness page is blocked by login or CAPTCHA")
     return normalized_text
 
@@ -447,25 +481,27 @@ def _wait_for_everness_date(
     previous_date = _everness_payload_date(previous_payload)
     previous_fingerprint = _everness_payload_fingerprint(previous_payload)
     refresh_observed = False
+    stable_fingerprint: str | None = None
     for _ in range(max(1, timeout_ms // 100)):
         payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
         _everness_payload_text(payload)
         loading = _everness_payload_loading(payload)
-        refresh_observed = refresh_observed or loading
+        if loading:
+            refresh_observed = True
+            stable_fingerprint = None
+        fingerprint = _everness_payload_fingerprint(payload)
         label = _everness_visible_locator(page, "#multi-language-date").inner_text()
         label_date = _parse_date_label(label)
         payload_date = _everness_payload_date(payload)
-        if (
-            not loading
-            and label_date == requested_date
-            and payload_date == requested_date
-            and (
-                previous_date == requested_date
-                or refresh_observed
-                or _everness_payload_fingerprint(payload) != previous_fingerprint
-            )
-        ):
-            return payload
+        if not loading and label_date == requested_date and payload_date == requested_date:
+            if previous_date == requested_date:
+                return payload
+            if not refresh_observed and fingerprint == previous_fingerprint:
+                stable_fingerprint = None
+            elif stable_fingerprint == fingerprint:
+                return payload
+            else:
+                stable_fingerprint = fingerprint
         page.wait_for_timeout(100)
     raise EvernessBrowserError("timed out waiting for requested date and refreshed Everness grid")
 

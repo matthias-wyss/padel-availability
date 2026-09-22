@@ -158,7 +158,19 @@ def test_everness_loading_page_is_not_final_data() -> None:
         parse_everness_dom(_payload([], loading=True), REQUESTED_DATE)
 
 
-@pytest.mark.parametrize("marker", ["Log in to continue", "CAPTCHA verification required"])
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "Log in to continue",
+        "CAPTCHA verification required",
+        "Sign-in required",
+        "Authenticate to continue",
+        "Authentication required",
+        "Connexion requise",
+        "Se connecter pour continuer",
+        "Accès refusé",
+    ],
+)
 def test_everness_login_or_captcha_is_bounded_error(marker: str) -> None:
     with pytest.raises(ValueError, match="blocked"):
         parse_everness_dom(_payload([], visible_text=marker), REQUESTED_DATE)
@@ -245,12 +257,14 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
         "rows",
         "grid_fingerprint",
         "loading",
+        "authentication_visible",
         "visible_text",
     }
     assert payload["view"] == "booking"
     assert payload["date_label"] == "22 Sep 2026"
     assert payload["courts"] == ["Court 1", "Court 2"]
     assert payload["loading"] is False
+    assert payload["authentication_visible"] is False
     fingerprint = payload["grid_fingerprint"]
     assert isinstance(fingerprint, str) and fingerprint.startswith("fnv1a-")
     assert fingerprint == repeated_payload["grid_fingerprint"]
@@ -289,6 +303,32 @@ def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) ->
     assert all(len(cast(list[object], row["cells"])) == 1 for row in rows)
     observations = parse_everness_dom(payload, REQUESTED_DATE)
     assert [observation.status for observation in observations] == ["available", "unavailable"]
+
+
+def test_everness_visible_script_detects_auth_overlay(fixture_browser: Any) -> None:
+    payload = _browser_payload(fixture_browser, "booking-auth")
+
+    assert payload["authentication_visible"] is True
+    with pytest.raises(ValueError, match="blocked"):
+        parse_everness_dom(payload, REQUESTED_DATE)
+
+
+def test_everness_parser_rejects_authentication_payload_flag() -> None:
+    payload = _payload([], visible_text="Everness booking")
+    payload["authentication_visible"] = True
+
+    with pytest.raises(ValueError, match="blocked"):
+        parse_everness_dom(payload, REQUESTED_DATE)
+
+
+def test_everness_visible_script_ignores_hidden_auth_controls(fixture_browser: Any) -> None:
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    payload = _browser_payload_html(
+        fixture_browser,
+        html.replace("</main>", '<input type="password" hidden></main>'),
+    )
+
+    assert payload["authentication_visible"] is False
 
 
 def test_everness_visible_fingerprint_ignores_date_label(fixture_browser: Any) -> None:
@@ -682,6 +722,40 @@ def test_everness_connector_accepts_empty_grid_after_loading() -> None:
     connector.close()
 
     assert result.slots == ()
+
+
+def test_everness_connector_waits_for_final_stable_grid_after_transient_valid_grid() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    dates = {
+        first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
+        second: [
+            _everness_payload(
+                second,
+                fingerprint="transient",
+                rows=[("09:00", ["cursor"]), ("10:30", ["cursor"])],
+            ),
+            _everness_payload(
+                second,
+                fingerprint="final",
+                rows=[("09:00", ["notallowed"]), ("10:30", ["cursor"])],
+            ),
+        ],
+    }
+    connector, _page, _context = _everness_connector(dates, events, initial_date=first)
+
+    result = connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert len(result.slots) == 2
+    assert [slot.status for slot in result.slots] == ["unavailable", "available"]
 
 
 def test_everness_connector_maps_startup_browser_error() -> None:
