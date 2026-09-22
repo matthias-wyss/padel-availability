@@ -13,6 +13,9 @@ dependencies = []
 padel-availability = "padel_availability.cli:main"
 
 [dependency-groups]
+browser = [
+    "playwright>=1.45,<2",
+]
 dev = [
     "pyright>=1.1,<2",
     "pytest>=8.3,<9",

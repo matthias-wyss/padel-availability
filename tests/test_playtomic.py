@@ -11,7 +11,7 @@ from padel_availability.connectors.playtomic import (
     load_playtomic_sources,
     parse_playtomic_slots,
 )
-from padel_availability.models import LocationRecord
+from padel_availability.models import LocationRecord, ModelError
 
 
 ROOT = Path(__file__).parents[1]
@@ -32,9 +32,68 @@ def test_manifest_has_exact_verified_locations_and_no_guessed_feeds() -> None:
     sources = load_playtomic_sources(ROOT / "data/playtomic_sources.json")
 
     assert [source.location_id for source in sources] == sorted(FIXTURE_NAMES)
-    assert all(source.status == "unavailable" for source in sources)
+    assert all(source.transport == "browser_dom" for source in sources)
+    assert all(source.status == "public" for source in sources)
     assert all(source.availability_url_template is None for source in sources)
     assert sources[0].checked_at.endswith("Z")
+
+
+def test_browser_source_requires_no_json_url() -> None:
+    source = PlaytomicSource(
+        "padel-station",
+        "https://playtomic.com/fr/clubs/padel-station1",
+        "browser_dom",
+        None,
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+
+    assert source.transport == "browser_dom"
+    assert source.availability_url_template is None
+
+
+def test_json_source_still_requires_a_window_template() -> None:
+    source = PlaytomicSource(
+        "padel-station",
+        "https://playtomic.com/fr/clubs/padel-station1",
+        "json",
+        "https://public.example/slots?from={window_start}&to={window_end}",
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+
+    assert source.transport == "json"
+    assert source.availability_url_template is not None
+
+
+def test_source_transport_relationships_are_strict() -> None:
+    with pytest.raises(ModelError, match="transport"):
+        PlaytomicSource(
+            "padel-station",
+            "https://playtomic.com/fr/clubs/padel-station1",
+            "xml",  # type: ignore[arg-type]
+            None,
+            "2026-09-22T00:00:00Z",
+            "unavailable",
+        )
+    with pytest.raises(ModelError, match="availability_url_template"):
+        PlaytomicSource(
+            "padel-station",
+            "https://playtomic.com/fr/clubs/padel-station1",
+            "json",
+            None,
+            "2026-09-22T00:00:00Z",
+            "public",
+        )
+    with pytest.raises(ModelError, match="availability_url_template"):
+        PlaytomicSource(
+            "padel-station",
+            "https://playtomic.com/fr/clubs/padel-station1",
+            "browser_dom",
+            "https://public.example/slots?from={window_start}&to={window_end}",
+            "2026-09-22T00:00:00Z",
+            "public",
+        )
 
 
 def test_synthetic_fixtures_normalize_slots_and_preserve_state() -> None:
@@ -182,6 +241,7 @@ def test_connector_returns_unavailable_without_calling_transport() -> None:
     source = PlaytomicSource(
         "padel-station",
         "https://playtomic.com/fr/clubs/padel-station1",
+        "json",
         None,
         "2026-09-22T00:00:00Z",
         "unavailable",
@@ -227,6 +287,7 @@ def test_connector_injects_fetcher_and_formats_public_window() -> None:
     source = PlaytomicSource(
         "padel-station",
         "https://playtomic.com/fr/clubs/padel-station1",
+        "json",
         "https://public.example/slots?from={window_start}&to={window_end}",
         "2026-09-22T00:00:00Z",
         "public",

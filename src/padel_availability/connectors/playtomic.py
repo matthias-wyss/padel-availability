@@ -18,6 +18,7 @@ from ..models import LocationRecord, ModelError, _text, _url, _utc_timestamp
 
 
 JsonFetcher = Callable[[str], object]
+TransportKind = Literal["json", "browser_dom"]
 PlaytomicStatus = Literal["public", "unavailable"]
 
 _EXPECTED_LOCATION_IDS = frozenset(
@@ -41,6 +42,7 @@ class PlaytomicSourceError(ValueError):
 class PlaytomicSource:
     location_id: str
     booking_url: str
+    transport: TransportKind
     availability_url_template: str | None
     checked_at: str
     status: PlaytomicStatus
@@ -49,6 +51,8 @@ class PlaytomicSource:
         _text(self.location_id, "location_id")
         _url(self.booking_url, "booking_url")
         _utc_timestamp(self.checked_at, "checked_at")
+        if self.transport not in {"json", "browser_dom"}:
+            raise ModelError("transport has invalid value")
         if self.status not in {"public", "unavailable"}:
             raise ModelError("status has invalid value")
         if self.availability_url_template is not None:
@@ -58,8 +62,12 @@ class PlaytomicSource:
                 or self.availability_url_template.count("{window_end}") != 1
             ):
                 raise ModelError("availability_url_template must contain date placeholders")
-        if self.status == "public" and self.availability_url_template is None:
-            raise ModelError("public sources require availability_url_template")
+        if self.transport == "json" and self.status == "public":
+            if self.availability_url_template is None:
+                raise ModelError("public JSON sources require availability_url_template")
+        if self.transport == "browser_dom" and self.status == "public":
+            if self.availability_url_template is not None:
+                raise ModelError("public browser sources must not have availability_url_template")
         if self.status == "unavailable" and self.availability_url_template is not None:
             raise ModelError("unavailable sources must not have availability_url_template")
 
@@ -88,6 +96,7 @@ def load_playtomic_sources(path: Path) -> tuple[PlaytomicSource, ...]:
         if not isinstance(row, dict) or set(row) != {
             "location_id",
             "booking_url",
+            "transport",
             "availability_url_template",
             "checked_at",
             "status",
@@ -97,6 +106,7 @@ def load_playtomic_sources(path: Path) -> tuple[PlaytomicSource, ...]:
             source = PlaytomicSource(
                 row["location_id"],
                 row["booking_url"],
+                row["transport"],
                 row["availability_url_template"],
                 row["checked_at"],
                 row["status"],
