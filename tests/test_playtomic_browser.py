@@ -447,25 +447,105 @@ def test_booking_shell_without_slots_is_not_ready() -> None:
     )
 
 
-def test_old_date_slots_do_not_make_the_requested_date_ready() -> None:
-    assert not _payload_is_ready(
-        {
-            "view": "booking",
-            "date": "2026-09-23",
-            "dates": ["2026-09-23"],
-            "slots": [
-                {
-                    "external_id": "slot-2026-09-22T13-30Z-90",
-                    "time": "3:30 PM",
-                    "duration": "90",
-                    "class": "bg-white",
-                    "disabled": False,
-                }
-            ],
-            "visible_text": "Available courts",
-        },
-        date(2026, 9, 23),
-    )
+def test_changed_date_stale_unchanged_slots_do_not_make_requested_date_ready() -> None:
+    previous_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-22T13-30Z-90",
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+
+    stale_payload = {
+        **previous_payload,
+        "date": "2026-09-23",
+        "dates": ["2026-09-23"],
+    }
+
+    assert not _payload_is_ready(stale_payload, date(2026, 9, 23), previous_payload)
+
+
+def test_changed_date_accepts_refreshed_slots_with_opaque_utc_shaped_id() -> None:
+    previous_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-22T13-30Z-90",
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+                "court": "Padel A",
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+    refreshed_payload = {
+        **previous_payload,
+        "date": "2026-09-23",
+        "dates": ["2026-09-23"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-22T05-00Z-90",
+                "time": "4:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+                "court": "Padel A",
+            }
+        ],
+    }
+
+    assert _payload_is_ready(refreshed_payload, date(2026, 9, 23), previous_payload)
+    observations = parse_visible_dom(refreshed_payload, date(2026, 9, 23))
+
+    assert observations[0].external_id == "slot-2026-09-22T05-00Z-90"
+    assert observations[0].starts_at == "2026-09-23T16:30:00+02:00"
+
+
+def test_changed_date_loading_marker_does_not_make_refreshed_slots_ready() -> None:
+    previous_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-22T13-30Z-90",
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+    loading_payload = {
+        **previous_payload,
+        "date": "2026-09-23",
+        "dates": ["2026-09-23"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-23T05-00Z-90",
+                "time": "4:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts Chargement en cours…",
+    }
+
+    assert not _payload_is_ready(loading_payload, date(2026, 9, 23), previous_payload)
 
 
 def test_changed_date_stale_no_slots_state_does_not_make_the_requested_date_ready() -> None:
@@ -897,3 +977,31 @@ def test_browser_observations_reject_conflicting_duplicate_ids() -> None:
             window_start=date(2026, 9, 22),
             window_end=date(2026, 9, 23),
         )
+
+
+def test_browser_observations_allow_reused_external_id_on_different_local_dates() -> None:
+    external_id = "slot-2026-09-22T19-30Z-90"
+    observations = tuple(
+        BrowserSlotObservation(
+            external_id,
+            "Court 1",
+            starts_at,
+            ends_at,
+            "available",
+        )
+        for starts_at, ends_at in (
+            ("2026-09-22T21:30:00+02:00", "2026-09-22T23:00:00+02:00"),
+            ("2026-09-23T21:30:00+02:00", "2026-09-23T23:00:00+02:00"),
+        )
+    )
+
+    slots = parse_browser_observations(
+        observations,
+        location_id="padel-station",
+        run_id="run-browser",
+        window_start=date(2026, 9, 22),
+        window_end=date(2026, 9, 24),
+    )
+
+    assert len(slots) == 2
+    assert [slot.external_id for slot in slots] == [external_id, external_id]

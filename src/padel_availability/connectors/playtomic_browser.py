@@ -92,6 +92,7 @@ _UNAVAILABLE_MARKERS = (
     "service temporarily unavailable",
     "ce club est temporairement indisponible",
 )
+_LOADING_MARKERS = ("loading", "chargement en cours")
 _BLOCK_MARKERS = (
     "captcha",
     "verify you are human",
@@ -196,30 +197,9 @@ def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
     return first
 
 
-_SLOT_TIMESTAMP = re.compile(r"(?<![0-9])([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}Z)")
-
-
-def _slot_matches_date(external_id: str, requested_date: date) -> bool:
-    match = _SLOT_TIMESTAMP.search(external_id)
-    if match is None:
-        return False
-    try:
-        slot_date = (
-            datetime.strptime(match.group(1), "%Y-%m-%dT%H-%MZ")
-            .replace(tzinfo=UTC)
-            .astimezone(_ZURICH)
-            .date()
-        )
-    except ValueError:
-        return False
-    return slot_date == requested_date
-
-
 def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation | None:
     slot = _dom_mapping(item, "visible slot")
     external_id = _dom_text(slot, "external_id")
-    if not _slot_matches_date(external_id, requested_date):
-        return None
     local_time_text = _dom_text(slot, "time")
     duration_text = _dom_text(slot, "duration")
     classes = slot.get("class")
@@ -365,9 +345,38 @@ def parse_browser_observations(
         existing = slots.get(slot.slot_key)
         if existing is not None:
             if existing != slot:
-                kind = "external_id" if observation.external_id is not None else "slot hash"
-                raise PlaytomicSourceError(f"conflicting duplicate {kind}")
-            continue
+                if (
+                    observation.external_id is None
+                    or existing.starts_at == slot.starts_at
+                    and existing.ends_at == slot.ends_at
+                ):
+                    kind = "external_id" if observation.external_id is not None else "slot hash"
+                    raise PlaytomicSourceError(f"conflicting duplicate {kind}")
+                try:
+                    slot = AvailabilitySlot(
+                        run_id,
+                        location_id,
+                        _slot_key(
+                            location_id,
+                            observation.court_label,
+                            starts_at,
+                            ends_at,
+                            None,
+                        ),
+                        observation.external_id,
+                        observation.court_label,
+                        starts_at,
+                        ends_at,
+                        "Europe/Zurich",
+                        observation.status,
+                    )
+                except ModelError as error:
+                    raise PlaytomicSourceError(f"observation {index} failed validation") from error
+                existing = slots.get(slot.slot_key)
+                if existing is not None and existing != slot:
+                    raise PlaytomicSourceError("conflicting duplicate slot hash")
+            else:
+                continue
         slots[slot.slot_key] = slot
 
     return tuple(
@@ -426,20 +435,19 @@ def _payload_is_ready(
         normalized_text = " ".join(visible_text.split()).casefold()
         if any(marker in normalized_text for marker in _BLOCK_MARKERS + _UNAVAILABLE_MARKERS):
             return True
+        if any(marker in normalized_text for marker in _LOADING_MARKERS):
+            return False
     if dom.get("view") != "booking" or dom.get("date") != requested_date.isoformat():
         return False
+    payload_changed = _payload_content(dom) != _payload_content(previous_payload)
+    date_changed = _payload_date(previous_payload) != requested_date.isoformat()
     slots = dom.get("slots")
-    if isinstance(slots, list) and _has_requested_date_slot(
-        cast(list[object], slots), requested_date
-    ):
-        return True
+    if isinstance(slots, list) and _has_visible_slot(cast(list[object], slots)):
+        return not date_changed or payload_changed
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
         if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
-            previous_date = _payload_date(previous_payload)
-            if previous_date != requested_date.isoformat():
-                return _payload_content(dom) != _payload_content(previous_payload)
-            return True
+            return not date_changed or payload_changed
     return False
 
 
@@ -451,7 +459,7 @@ def _payload_date(payload: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _payload_content(payload: object) -> tuple[object, tuple[bool, bool, bool]] | None:
+def _payload_content(payload: object) -> tuple[object, tuple[bool, bool, bool, bool]] | None:
     if not isinstance(payload, Mapping):
         return None
     dom = cast(Mapping[str, object], payload)
@@ -459,21 +467,22 @@ def _payload_content(payload: object) -> tuple[object, tuple[bool, bool, bool]] 
     normalized_text = (
         " ".join(visible_text.split()).casefold() if isinstance(visible_text, str) else ""
     )
-    marker_state: tuple[bool, bool, bool] = (
+    marker_state: tuple[bool, bool, bool, bool] = (
         any(marker in normalized_text for marker in _NO_SLOT_MARKERS),
         any(marker in normalized_text for marker in _UNAVAILABLE_MARKERS),
         any(marker in normalized_text for marker in _BLOCK_MARKERS),
+        any(marker in normalized_text for marker in _LOADING_MARKERS),
     )
     return dom.get("slots"), marker_state
 
 
-def _has_requested_date_slot(slots: list[object], requested_date: date) -> bool:
+def _has_visible_slot(slots: list[object]) -> bool:
     for item in slots:
         if not isinstance(item, Mapping):
             continue
         mapping = cast(Mapping[str, object], item)
         external_id = mapping.get("external_id")
-        if isinstance(external_id, str) and _slot_matches_date(external_id, requested_date):
+        if isinstance(external_id, str) and external_id.strip():
             return True
     return False
 
