@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "padel-availability"
+version = "0.1.0"
+description = "Verified padel club catalog for the Geneva to Lausanne region"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+padel-availability = "padel_availability.cli:main"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1,<2",
+    "pytest>=8.3,<9",
+    "ruff>=0.6,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"

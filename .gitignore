@@ -1,1 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.pyright/
 .worktrees/
+var/
+*.sqlite3
+*.sqlite3-*
+.env
+.env.*
+!.env.example

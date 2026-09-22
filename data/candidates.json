@@ -1,0 +1,234 @@
+[
+  {
+    "candidate_id": "airpad-les-acacias",
+    "raw_name": "AIRPAD Les Acacias",
+    "municipality": "Genève",
+    "courts_text": "2",
+    "type_text": "couvert/indoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "airpad-la-praille",
+    "raw_name": "AIRPAD La Praille",
+    "municipality": "Lancy",
+    "courts_text": "2",
+    "type_text": "indoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "airpad-meyrin",
+    "raw_name": "AIRPAD Meyrin",
+    "municipality": "Meyrin",
+    "courts_text": "1",
+    "type_text": "—",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "airpad-plan-les-ouates",
+    "raw_name": "AIRPAD Plan-les-Ouates",
+    "municipality": "Plan-les-Ouates",
+    "courts_text": "2",
+    "type_text": "—",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "asphalte-jonction",
+    "raw_name": "L'Asphalte / Pointe de la Jonction",
+    "municipality": "Genève",
+    "courts_text": "1",
+    "type_text": "couvert",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "padel-station",
+    "raw_name": "Padel Station",
+    "municipality": "Chêne-Bourg",
+    "courts_text": "3",
+    "type_text": "indoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "maisonnex",
+    "raw_name": "Centre sportif de Maisonnex",
+    "municipality": "Meyrin",
+    "courts_text": "3",
+    "type_text": "couverts",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "cherpines",
+    "raw_name": "Centre sportif des Cherpines",
+    "municipality": "Plan-les-Ouates",
+    "courts_text": "2",
+    "type_text": "couverts",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "evaux",
+    "raw_name": "Padel des Evaux",
+    "municipality": "Onex",
+    "courts_text": "3",
+    "type_text": "outdoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "vernier",
+    "raw_name": "Tennis, badminton et padel de Vernier",
+    "municipality": "Vernier",
+    "courts_text": "2",
+    "type_text": "outdoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "bernex",
+    "raw_name": "Court de padel / TC Bernex",
+    "municipality": "Bernex",
+    "courts_text": "2",
+    "type_text": "outdoor",
+    "access_text": "Public"
+  },
+  {
+    "candidate_id": "fraisiers",
+    "raw_name": "Padel REDSPORT-LANDAGORA / TC Fraisiers",
+    "municipality": "Lancy",
+    "courts_text": "1",
+    "type_text": "outdoor",
+    "access_text": "À vérifier"
+  },
+  {
+    "candidate_id": "csu-champel",
+    "raw_name": "CSU Champel",
+    "municipality": "Genève",
+    "courts_text": "1",
+    "type_text": "outdoor",
+    "access_text": "Universitaire / conditions"
+  },
+  {
+    "candidate_id": "drizia-miremont",
+    "raw_name": "Drizia-Miremont / Bout-du-Monde",
+    "municipality": "Genève",
+    "courts_text": "1",
+    "type_text": "outdoor",
+    "access_text": "Membres"
+  },
+  {
+    "candidate_id": "cologny",
+    "raw_name": "Centre sportif de Cologny",
+    "municipality": "Cologny",
+    "courts_text": "1",
+    "type_text": "indoor",
+    "access_text": "Groupe avec membres"
+  },
+  {
+    "candidate_id": "collonge-bellerive",
+    "raw_name": "Padel de Collonge-Bellerive",
+    "municipality": "Collonge-Bellerive",
+    "courts_text": "1",
+    "type_text": "—",
+    "access_text": "À vérifier"
+  },
+  {
+    "candidate_id": "david-lloyd-geneva",
+    "raw_name": "David Lloyd Country Club Geneva",
+    "municipality": "Bellevue",
+    "courts_text": "3",
+    "type_text": "indoor",
+    "access_text": "Club"
+  },
+  {
+    "candidate_id": "gva-palexpo",
+    "raw_name": "GVA Padel / Palexpo",
+    "municipality": "Grand-Saconnex",
+    "courts_text": "3",
+    "type_text": "indoor",
+    "access_text": "Saisonnier"
+  },
+  {
+    "candidate_id": "mies-tannay",
+    "raw_name": "Tennis Club Mies-Tannay",
+    "municipality": "Mies/Tannay",
+    "courts_text": "Padel",
+    "type_text": "outdoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "crans-vd",
+    "raw_name": "Tennis Padel Crans VD",
+    "municipality": "Crans-près-Céligny",
+    "courts_text": "Padel",
+    "type_text": "outdoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "everness",
+    "raw_name": "Everness",
+    "municipality": "Chavannes-de-Bogis",
+    "courts_text": "3",
+    "type_text": "outdoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "gland",
+    "raw_name": "Padel Tennis Gland",
+    "municipality": "Gland",
+    "courts_text": "Padel",
+    "type_text": "—",
+    "access_text": null
+  },
+  {
+    "candidate_id": "padel-parc-etoy",
+    "raw_name": "Padel Parc Etoy",
+    "municipality": "Etoy",
+    "courts_text": "3",
+    "type_text": "indoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "padel-parc-preverenges",
+    "raw_name": "Padel Parc Préverenges",
+    "municipality": "Préverenges",
+    "courts_text": "3",
+    "type_text": "indoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "padel-one-echandens",
+    "raw_name": "Padel One Echandens",
+    "municipality": "Echandens",
+    "courts_text": "4 doubles + 1 simple",
+    "type_text": "indoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "urban-padel-lausanne",
+    "raw_name": "Urban Padel Lausanne",
+    "municipality": "Lausanne",
+    "courts_text": "indoor",
+    "type_text": "indoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "ehl-padel-club",
+    "raw_name": "EHL Padel Club",
+    "municipality": "Lausanne",
+    "courts_text": "2",
+    "type_text": "outdoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "vaudoise-arena",
+    "raw_name": "Vaudoise aréna",
+    "municipality": "Prilly",
+    "courts_text": "2",
+    "type_text": "outdoor",
+    "access_text": null
+  },
+  {
+    "candidate_id": "green-club",
+    "raw_name": "Green Club",
+    "municipality": "Romanel-sur-Lausanne",
+    "courts_text": "4",
+    "type_text": "2 indoor + 2 outdoor",
+    "access_text": null
+  }
+]

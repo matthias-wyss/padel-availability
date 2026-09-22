@@ -1,0 +1,429 @@
+import sqlite3
+from contextlib import nullcontext
+from pathlib import Path
+from typing import Sequence
+
+from .models import (
+    CandidateEntry,
+    CandidateMatch,
+    CourtGroup,
+    LocationRecord,
+    SourceEvidence,
+    VerificationRun,
+)
+
+
+def connect(path: Path) -> sqlite3.Connection:
+    path_text = str(path)
+    if path_text != ":memory:":
+        path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+def initialize(connection: sqlite3.Connection) -> None:
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS locations (
+            location_id TEXT PRIMARY KEY,
+            canonical_name TEXT NOT NULL,
+            municipality TEXT NOT NULL,
+            brand TEXT,
+            address TEXT,
+            latitude REAL,
+            longitude REAL,
+            access_kind TEXT NOT NULL CHECK (access_kind IN ('public', 'members', 'university', 'conditions', 'unknown')),
+            membership_required TEXT NOT NULL CHECK (membership_required IN ('yes', 'no', 'unknown')),
+            public_booking TEXT NOT NULL CHECK (public_booking IN ('yes', 'no', 'unknown')),
+            racket_rental TEXT NOT NULL CHECK (racket_rental IN ('yes', 'no', 'unknown')),
+            locker_rooms TEXT NOT NULL CHECK (locker_rooms IN ('yes', 'no', 'unknown')),
+            booking_account_required TEXT NOT NULL CHECK (booking_account_required IN ('yes', 'no', 'unknown')),
+            verification_status TEXT NOT NULL CHECK (verification_status IN ('confirmed', 'probable', 'to_verify', 'not_confirmed', 'closed')),
+            overall_cover_status TEXT NOT NULL CHECK (overall_cover_status IN ('indoor', 'outdoor', 'partially_covered', 'seasonal', 'unknown')),
+            official_url TEXT,
+            booking_url TEXT,
+            booking_platform TEXT,
+            first_verified_at TEXT,
+            last_verified_at TEXT,
+            notes TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS court_groups (
+            court_group_id INTEGER PRIMARY KEY,
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            count INTEGER NOT NULL CHECK (count > 0),
+            format TEXT,
+            cover_status TEXT NOT NULL CHECK (cover_status IN ('indoor', 'outdoor', 'partially_covered', 'seasonal', 'unknown')),
+            UNIQUE (location_id, label)
+        );
+
+        CREATE TABLE IF NOT EXISTS location_aliases (
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            alias TEXT NOT NULL,
+            PRIMARY KEY (location_id, alias)
+        );
+
+        CREATE TABLE IF NOT EXISTS sources (
+            source_id INTEGER PRIMARY KEY,
+            url TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            UNIQUE (url, source_type, title, checked_at)
+        );
+
+        CREATE TABLE IF NOT EXISTS location_evidence (
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            source_id INTEGER NOT NULL REFERENCES sources(source_id),
+            fact_key TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            relation TEXT NOT NULL CHECK (relation IN ('supports', 'contradicts', 'discovery')),
+            evidence TEXT NOT NULL,
+            confidence TEXT NOT NULL CHECK (confidence IN ('confirmed', 'probable', 'to_verify')),
+            PRIMARY KEY (location_id, source_id, fact_key, checked_at, evidence)
+        );
+
+        CREATE TABLE IF NOT EXISTS candidate_entries (
+            candidate_id TEXT PRIMARY KEY,
+            raw_name TEXT NOT NULL,
+            municipality TEXT NOT NULL,
+            courts_text TEXT,
+            type_text TEXT,
+            access_text TEXT,
+            matched_location_id TEXT REFERENCES locations(location_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS location_candidates (
+            location_id TEXT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            candidate_id TEXT NOT NULL REFERENCES candidate_entries(candidate_id) ON DELETE CASCADE,
+            PRIMARY KEY (location_id, candidate_id),
+            UNIQUE (candidate_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS candidate_matches (
+            candidate_id TEXT PRIMARY KEY REFERENCES candidate_entries(candidate_id) ON DELETE CASCADE,
+            location_id TEXT REFERENCES locations(location_id),
+            status TEXT NOT NULL CHECK (status IN ('matched', 'duplicate', 'not_confirmed', 'unresolved')),
+            note TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS verification_runs (
+            run_id TEXT PRIMARY KEY,
+            started_at TEXT NOT NULL,
+            ended_at TEXT NOT NULL,
+            candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+            error_count INTEGER NOT NULL CHECK (error_count >= 0),
+            summary TEXT NOT NULL
+        );
+        """
+    )
+    connection.commit()
+
+
+def insert_candidates(
+    connection: sqlite3.Connection, entries: Sequence[CandidateEntry], *, commit: bool = True
+) -> None:
+    context = connection if commit else nullcontext()
+    with context:
+        connection.executemany(
+            """
+            INSERT INTO candidate_entries (
+                candidate_id, raw_name, municipality, courts_text, type_text, access_text
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(candidate_id) DO UPDATE SET
+                raw_name = excluded.raw_name,
+                municipality = excluded.municipality,
+                courts_text = excluded.courts_text,
+                type_text = excluded.type_text,
+                access_text = excluded.access_text
+            """,
+            [
+                (
+                    entry.candidate_id,
+                    entry.raw_name,
+                    entry.municipality,
+                    entry.courts_text,
+                    entry.type_text,
+                    entry.access_text,
+                )
+                for entry in entries
+            ],
+        )
+
+
+def _insert_evidence(connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence) -> None:
+    connection.execute(
+        """
+        INSERT INTO sources (url, source_type, title, checked_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(url, source_type, title, checked_at) DO NOTHING
+        """,
+        (evidence.url, evidence.source_type, evidence.title, evidence.checked_at),
+    )
+    source_id = connection.execute(
+        "SELECT source_id FROM sources "
+        "WHERE url = ? AND source_type = ? AND title = ? AND checked_at = ?",
+        (evidence.url, evidence.source_type, evidence.title, evidence.checked_at),
+    ).fetchone()[0]
+    connection.execute(
+        """
+        INSERT INTO location_evidence (
+            location_id, source_id, fact_key, checked_at, relation, evidence, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(location_id, source_id, fact_key, checked_at, evidence) DO UPDATE SET
+            relation = excluded.relation,
+            evidence = excluded.evidence,
+            confidence = excluded.confidence
+        """,
+        (
+            location_id,
+            source_id,
+            evidence.fact_key,
+            evidence.checked_at,
+            evidence.relation,
+            evidence.evidence,
+            evidence.confidence,
+        ),
+    )
+
+
+def upsert_location(
+    connection: sqlite3.Connection, location: LocationRecord, *, commit: bool = True
+) -> None:
+    checked_at = sorted(item.checked_at for item in location.evidence)
+    context = connection if commit else nullcontext()
+    with context:
+        connection.execute(
+            """
+            INSERT INTO locations (
+                location_id, canonical_name, municipality, brand, address, latitude, longitude,
+                access_kind, membership_required, public_booking, racket_rental, locker_rooms,
+                booking_account_required, verification_status, overall_cover_status,
+                official_url, booking_url, booking_platform, first_verified_at, last_verified_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(location_id) DO UPDATE SET
+                canonical_name = excluded.canonical_name,
+                municipality = excluded.municipality,
+                brand = excluded.brand,
+                address = excluded.address,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude,
+                access_kind = excluded.access_kind,
+                membership_required = excluded.membership_required,
+                public_booking = excluded.public_booking,
+                racket_rental = excluded.racket_rental,
+                locker_rooms = excluded.locker_rooms,
+                booking_account_required = excluded.booking_account_required,
+                verification_status = excluded.verification_status,
+                overall_cover_status = excluded.overall_cover_status,
+                official_url = excluded.official_url,
+                booking_url = excluded.booking_url,
+                booking_platform = excluded.booking_platform,
+                first_verified_at = excluded.first_verified_at,
+                last_verified_at = excluded.last_verified_at,
+                notes = excluded.notes
+            """,
+            (
+                location.location_id,
+                location.canonical_name,
+                location.municipality,
+                location.brand,
+                location.address,
+                location.latitude,
+                location.longitude,
+                location.access_kind,
+                location.membership_required,
+                location.public_booking,
+                location.racket_rental,
+                location.locker_rooms,
+                location.booking_account_required,
+                location.verification_status,
+                location.overall_cover_status,
+                location.official_url,
+                location.booking_url,
+                location.booking_platform,
+                checked_at[0] if checked_at else None,
+                checked_at[-1] if checked_at else None,
+                location.notes,
+            ),
+        )
+        connection.execute("DELETE FROM court_groups WHERE location_id = ?", (location.location_id,))
+        connection.execute("DELETE FROM location_aliases WHERE location_id = ?", (location.location_id,))
+        connection.execute("DELETE FROM location_evidence WHERE location_id = ?", (location.location_id,))
+        connection.execute("DELETE FROM location_candidates WHERE location_id = ?", (location.location_id,))
+        connection.execute(
+            "UPDATE candidate_entries SET matched_location_id = NULL WHERE matched_location_id = ?",
+            (location.location_id,),
+        )
+        for candidate_id in location.candidate_ids:
+            connection.execute(
+                "DELETE FROM location_candidates WHERE candidate_id = ? AND location_id != ?",
+                (candidate_id, location.location_id),
+            )
+            connection.execute(
+                """
+                UPDATE candidate_entries
+                SET matched_location_id = NULL
+                WHERE candidate_id = ? AND matched_location_id != ?
+                """,
+                (candidate_id, location.location_id),
+            )
+            connection.execute(
+                "UPDATE candidate_matches SET location_id = ? WHERE candidate_id = ?",
+                (location.location_id, candidate_id),
+            )
+        connection.executemany(
+            "INSERT INTO court_groups "
+            "(location_id, label, count, format, cover_status) VALUES (?, ?, ?, ?, ?)",
+            [
+                (location.location_id, group.label, group.count, group.format, group.cover_status)
+                for group in location.court_groups
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO location_aliases (location_id, alias) VALUES (?, ?)",
+            [(location.location_id, alias) for alias in location.aliases],
+        )
+        connection.executemany(
+            "INSERT INTO location_candidates (location_id, candidate_id) VALUES (?, ?)",
+            [(location.location_id, candidate_id) for candidate_id in location.candidate_ids],
+        )
+        connection.execute(
+            "UPDATE candidate_entries SET matched_location_id = ? WHERE candidate_id IN ({})".format(
+                ",".join("?" for _ in location.candidate_ids) or "NULL"
+            ),
+            (location.location_id, *location.candidate_ids),
+        )
+        for evidence in location.evidence:
+            _insert_evidence(connection, location.location_id, evidence)
+
+
+def insert_evidence(connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence) -> None:
+    with connection:
+        _insert_evidence(connection, location_id, evidence)
+
+
+def _location_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> LocationRecord:
+    groups = connection.execute(
+        "SELECT label, count, format, cover_status FROM court_groups "
+        "WHERE location_id = ? ORDER BY court_group_id",
+        (row["location_id"],),
+    ).fetchall()
+    aliases = connection.execute(
+        "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias",
+        (row["location_id"],),
+    ).fetchall()
+    candidate_ids = connection.execute(
+        "SELECT candidate_id FROM location_candidates WHERE location_id = ? ORDER BY candidate_id",
+        (row["location_id"],),
+    ).fetchall()
+    evidence = connection.execute(
+        """
+        SELECT s.url, s.source_type, s.title, e.checked_at,
+               e.fact_key, e.relation, e.evidence, e.confidence
+        FROM location_evidence AS e
+        JOIN sources AS s ON s.source_id = e.source_id
+        WHERE e.location_id = ?
+        ORDER BY e.fact_key, s.url, s.source_type, s.title, e.checked_at, e.evidence
+        """,
+        (row["location_id"],),
+    ).fetchall()
+    return LocationRecord(
+        location_id=row["location_id"],
+        canonical_name=row["canonical_name"],
+        municipality=row["municipality"],
+        candidate_ids=tuple(item["candidate_id"] for item in candidate_ids),
+        access_kind=row["access_kind"],
+        membership_required=row["membership_required"],
+        public_booking=row["public_booking"],
+        racket_rental=row["racket_rental"],
+        locker_rooms=row["locker_rooms"],
+        booking_account_required=row["booking_account_required"],
+        verification_status=row["verification_status"],
+        court_groups=tuple(
+            CourtGroup(item["label"], item["count"], item["format"], item["cover_status"])
+            for item in groups
+        ),
+        aliases=tuple(item["alias"] for item in aliases),
+        evidence=tuple(
+            SourceEvidence(
+                item["url"],
+                item["source_type"],
+                item["title"],
+                item["checked_at"],
+                item["fact_key"],
+                item["relation"],
+                item["evidence"],
+                item["confidence"],
+            )
+            for item in evidence
+        ),
+        notes=row["notes"],
+        brand=row["brand"],
+        address=row["address"],
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        overall_cover_status=row["overall_cover_status"],
+        official_url=row["official_url"],
+        booking_url=row["booking_url"],
+        booking_platform=row["booking_platform"],
+    )
+
+
+def list_locations(connection: sqlite3.Connection) -> tuple[LocationRecord, ...]:
+    rows = connection.execute(
+        "SELECT * FROM locations ORDER BY municipality, canonical_name"
+    ).fetchall()
+    return tuple(_location_from_row(connection, row) for row in rows)
+
+
+def record_candidate_match(
+    connection: sqlite3.Connection, match: CandidateMatch, *, commit: bool = True
+) -> None:
+    context = connection if commit else nullcontext()
+    with context:
+        connection.execute(
+            """
+            INSERT INTO candidate_matches (candidate_id, location_id, status, note)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(candidate_id) DO UPDATE SET
+                location_id = excluded.location_id,
+                status = excluded.status,
+                note = excluded.note
+            """,
+            (match.candidate_id, match.location_id, match.status, match.note),
+        )
+
+
+def list_candidate_matches(connection: sqlite3.Connection) -> tuple[CandidateMatch, ...]:
+    rows = connection.execute(
+        "SELECT candidate_id, location_id, status, note FROM candidate_matches ORDER BY candidate_id"
+    ).fetchall()
+    return tuple(
+        CandidateMatch(row["candidate_id"], row["location_id"], row["status"], row["note"])
+        for row in rows
+    )
+
+
+def create_verification_run(
+    connection: sqlite3.Connection, run: VerificationRun, *, commit: bool = True
+) -> None:
+    context = connection if commit else nullcontext()
+    with context:
+        connection.execute(
+            """
+            INSERT INTO verification_runs (
+                run_id, started_at, ended_at, candidate_count, error_count, summary
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                started_at = excluded.started_at,
+                ended_at = excluded.ended_at,
+                candidate_count = excluded.candidate_count,
+                error_count = excluded.error_count,
+                summary = excluded.summary
+            """,
+            (run.run_id, run.started_at, run.ended_at, run.candidate_count, run.error_count, run.summary),
+        )
