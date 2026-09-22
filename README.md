@@ -80,6 +80,22 @@ or login pages become explicit `error` outcomes; they are not bypassed. Each
 outcome is persisted locally. An `error` or `unavailable` outcome keeps the
 previous successful snapshot as stale rather than replacing its slots.
 
+Collect the public Everness availability grid manually:
+
+```bash
+uv run padel-availability collect-everness \
+  --database var/catalog.sqlite3 \
+  --sources data/everness_sources.json \
+  --days 14
+```
+
+This command reads the public Plugin.ch grid and is sequential, read-only, and
+manual. Browser state is ephemeral and is not saved between runs. It never logs
+in or reserves. Other portals without public availability remain unsupported;
+they are not bypassed. Each outcome is persisted locally, and an `error` or
+`unavailable` outcome keeps the previous successful snapshot as stale rather
+than replacing its slots.
+
 Collect the four AIRPAD availability snapshots manually:
 
 ```bash
