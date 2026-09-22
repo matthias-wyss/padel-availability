@@ -627,7 +627,12 @@ def _airpad_location(location_id: str = "airpad-la-praille") -> LocationRecord:
     )
 
 
-def _airpad_payload(requested_date: date, *, slots: list[dict[str, object]]) -> dict[str, object]:
+def _airpad_payload(
+    requested_date: date,
+    *,
+    slots: list[dict[str, object]],
+    visible_text: str = "AIRPAD booking",
+) -> dict[str, object]:
     return {
         "view": "booking",
         "date": requested_date.isoformat(),
@@ -635,7 +640,7 @@ def _airpad_payload(requested_date: date, *, slots: list[dict[str, object]]) -> 
         "empty_grid": not slots,
         "empty_rows": [] if slots else ["Terrain 1"],
         "invalid_rows": False,
-        "visible_text": "AIRPAD booking",
+        "visible_text": visible_text,
     }
 
 
@@ -885,6 +890,34 @@ def test_airpad_connector_waits_for_refreshed_grid_after_date_change() -> None:
     assert {slot.external_id for slot in result.slots} == {"slot-1", "slot-2"}
 
 
+def test_airpad_connector_waits_for_new_slots_after_stale_empty_grid() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {
+            first: [("09:00", _airpad_payload(first, slots=[]))],
+            second: [("09:00", _airpad_payload(second, slots=[_airpad_slot("slot-2")]))],
+        },
+        first,
+        events,
+        stale_payloads={second: [_airpad_payload(second, slots=[])]},
+    )
+    connector, _page, _context = _airpad_connector(frame, events)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert [slot.external_id for slot in result.slots] == ["slot-2"]
+
+
 def test_airpad_connector_stops_on_disabled_time_range_arrow() -> None:
     events: list[str] = []
     requested = date(2026, 9, 22)
@@ -997,7 +1030,35 @@ def test_airpad_connector_waits_for_booking_controls_after_location_click() -> N
     assert "wait:100" in events
 
 
-def test_airpad_connector_accepts_consecutive_valid_empty_grids() -> None:
+def test_airpad_connector_accepts_consecutive_valid_empty_grids_after_refresh() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {
+            first: [("09:00", _airpad_payload(first, slots=[]))],
+            second: [("09:00", _airpad_payload(second, slots=[]))],
+        },
+        first,
+        events,
+        stale_payloads={second: [_airpad_payload(second, slots=[], visible_text="loading")]},
+    )
+    connector, _page, _context = _airpad_connector(frame, events, timeout_ms=300)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.slots == ()
+
+
+def test_airpad_connector_rejects_unchanged_empty_grid_without_refresh() -> None:
     events: list[str] = []
     first = date(2026, 9, 22)
     second = date(2026, 9, 23)
@@ -1012,16 +1073,15 @@ def test_airpad_connector_accepts_consecutive_valid_empty_grids() -> None:
     )
     connector, _page, _context = _airpad_connector(frame, events, timeout_ms=100)
 
-    result = connector.collect(
-        _airpad_location(),
-        run_id="run-airpad",
-        window_start=first,
-        window_end=date(2026, 9, 24),
-        collected_at="2026-09-22T07:00:00Z",
-    )
+    with pytest.raises(AirpadBrowserError, match="timed out"):
+        connector.collect(
+            _airpad_location(),
+            run_id="run-airpad",
+            window_start=first,
+            window_end=date(2026, 9, 24),
+            collected_at="2026-09-22T07:00:00Z",
+        )
     connector.close()
-
-    assert result.slots == ()
 
 
 def test_airpad_connector_waits_for_requested_card_after_other_card() -> None:

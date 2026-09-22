@@ -583,6 +583,58 @@ def test_airpad_browser_startup_error_is_persisted_for_each_site(tmp_path: Path)
         connection.close()
 
 
+def test_airpad_raw_browser_startup_error_is_persisted_for_each_site(tmp_path: Path) -> None:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError as error:
+        pytest.skip(f"Playwright is unavailable: {error}")
+
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise PlaywrightError("browser launch failed")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                del location, run_id, window_start, window_end, collected_at
+                raise AssertionError("collect should not run after browser startup failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        assert lifecycle == ["open", "close"]
+        assert [outcome.location_id for outcome in outcomes] == list(AIRPAD_IDS)
+        assert [outcome.status for outcome in outcomes] == ["error"] * 4
+        assert [outcome.error for outcome in outcomes] == ["browser launch failed"] * 4
+        assert len(list_availability_runs(connection)) == 4
+    finally:
+        connection.close()
+
+
 def test_collection_runs_all_selected_sites_independently(tmp_path: Path) -> None:
     connection = ready_database(tmp_path)
     try:

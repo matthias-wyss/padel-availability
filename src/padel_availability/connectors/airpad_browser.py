@@ -404,16 +404,19 @@ def _wait_for_airpad_date(
             visible_text = dom.get("visible_text")
             if isinstance(visible_text, str):
                 normalized_text = " ".join(visible_text.split()).casefold()
-                refresh_observed = refresh_observed or any(
+                loading_observed = any(
                     marker in normalized_text for marker in _AIRPAD_LOADING_MARKERS
                 )
+                refresh_observed = refresh_observed or loading_observed
+                if loading_observed:
+                    page.wait_for_timeout(100)
+                    continue
             if (
                 dom.get("date") == requested_date.isoformat()
                 and (
                     not require_refresh
                     or refresh_observed
                     or _airpad_grid(dom) != previous_grid
-                    or dom.get("empty_grid") is True
                 )
             ):
                 return dom

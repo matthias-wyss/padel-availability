@@ -23,6 +23,7 @@ from .connectors.playtomic_browser import (
     BrowserConnector,
     BrowserConnectorFactory,
     PlaytomicBrowserConnector,
+    _is_documented_browser_error,  # pyright: ignore[reportPrivateUsage]
 )
 from .database import save_availability_result
 from .models import LocationRecord
@@ -294,6 +295,12 @@ def collect_airpad(
                 browser_connector.open()
             except (AirpadSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
                 browser_open_error = error
+            except Exception as error:
+                if not _is_documented_browser_error(error):
+                    raise
+                browser_open_error = AirpadSourceError(
+                    str(error).strip()[:160] or type(error).__name__
+                )
         for location in selected:
             source = sources_by_id.get(location.location_id)
             source_url = source.booking_url if source is not None else location.booking_url
