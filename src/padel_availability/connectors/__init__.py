@@ -10,6 +10,8 @@ from .playtomic import (
     parse_playtomic_slots,
 )
 from .playtomic_browser import (
+    BrowserConnector,
+    BrowserConnectorFactory,
     BrowserSlotObservation,
     PlaytomicBrowserConnector,
     PlaytomicBrowserError,
@@ -19,6 +21,8 @@ from .playtomic_browser import (
 )
 
 __all__ = [
+    "BrowserConnector",
+    "BrowserConnectorFactory",
     "BrowserSlotObservation",
     "JsonFetcher",
     "PlaytomicBrowserConnector",

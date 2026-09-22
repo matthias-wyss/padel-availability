@@ -1,20 +1,28 @@
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from padel_availability.availability import local_window
+from padel_availability.availability import (
+    AvailabilityResult,
+    AvailabilityRun,
+    AvailabilityRunStatus,
+    AvailabilitySlot,
+    local_window,
+)
 from padel_availability.collector import collect_playtomic
 from padel_availability.connectors.playtomic import (
     PlaytomicSource,
     PlaytomicSourceError,
     load_playtomic_sources,
 )
+from padel_availability.connectors.playtomic_browser import PlaytomicBrowserError
 from padel_availability.database import (
     connect,
     get_availability_snapshot,
@@ -25,7 +33,6 @@ from padel_availability.database import (
 )
 from padel_availability.inventory import load_candidates, load_locations
 from padel_availability.models import LocationRecord, ModelError
-
 
 ROOT = Path(__file__).parents[1]
 PLAYTOMIC_IDS = (
@@ -62,6 +69,49 @@ def five_playtomic_sources() -> tuple[PlaytomicSource, ...]:
             status="public",
         )
         for source in manifest_sources
+    )
+
+
+def mixed_playtomic_sources() -> tuple[PlaytomicSource, ...]:
+    browser_ids = {"gva-palexpo", "padel-parc-etoy", "padel-station"}
+    return tuple(
+        replace(
+            source,
+            transport="browser_dom",
+            availability_url_template=None,
+        )
+        if source.location_id in browser_ids
+        else source
+        for source in five_playtomic_sources()
+    )
+
+
+def browser_result(
+    location: LocationRecord,
+    source: PlaytomicSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "playtomic_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
     )
 
 
@@ -120,7 +170,7 @@ def test_collection_selects_one_location_and_converts_utc_now(tmp_path: Path) ->
             connection,
             five_playtomic_locations(),
             five_playtomic_sources(),
-            now=datetime(2026, 9, 22, 23, 30, tzinfo=timezone.utc),
+            now=datetime(2026, 9, 22, 23, 30, tzinfo=UTC),
             horizon_days=2,
             location_id="padel-station",
             fetch_json=fixture_fetch_json,
@@ -130,9 +180,9 @@ def test_collection_selects_one_location_and_converts_utc_now(tmp_path: Path) ->
         assert outcomes[0].window_start == "2026-09-23"
         assert outcomes[0].window_end == "2026-09-25"
         assert outcomes[0].slot_count == 2
-        assert local_window(datetime(2026, 9, 22, 23, 30, tzinfo=timezone.utc), 2) == (
-            datetime(2026, 9, 23).date(),
-            datetime(2026, 9, 25).date(),
+        assert local_window(datetime(2026, 9, 22, 23, 30, tzinfo=UTC), 2) == (
+            date(2026, 9, 23),
+            date(2026, 9, 25),
         )
     finally:
         connection.close()
@@ -258,5 +308,182 @@ def test_base_exception_is_not_swallowed(tmp_path: Path) -> None:
                 fetch_json=fetch_json,
             )
         assert list_availability_runs(connection) == ()
+    finally:
+        connection.close()
+
+
+def test_collection_selects_browser_once_saves_immediately_and_continues(
+    tmp_path: Path,
+) -> None:
+    connection = ready_database(tmp_path)
+    locations = five_playtomic_locations()
+    sources = mixed_playtomic_sources()
+    sources_by_id = {source.location_id: source for source in sources}
+    factory_calls: list[Sequence[PlaytomicSource]] = []
+    browser_calls: list[str] = []
+    fetch_calls: list[str] = []
+
+    def browser_factory(received_sources: Sequence[PlaytomicSource]):
+        factory_calls.append(received_sources)
+
+        class FakeBrowserConnector:
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                browser_calls.append(location.location_id)
+                if location.location_id == "padel-parc-etoy":
+                    assert len(list_availability_runs(connection)) == 1
+                    raise PlaytomicBrowserError("DOM failed")
+                if location.location_id == "gva-palexpo":
+                    return browser_result(
+                        location,
+                        sources_by_id[location.location_id],
+                        status="unavailable",
+                        error="public booking page is explicitly unavailable",
+                        run_id=run_id,
+                        window_start=window_start,
+                        window_end=window_end,
+                        collected_at=collected_at,
+                    )
+                assert location.location_id == "padel-station"
+                assert len(list_availability_runs(connection)) == 3
+                slots = tuple(
+                    AvailabilitySlot(
+                        run_id,
+                        location.location_id,
+                        f"station-{index}",
+                        f"station-{index}",
+                        f"Padel {index}",
+                        f"2026-09-22T{8 + index:02d}:00:00Z",
+                        f"2026-09-22T{9 + index:02d}:00:00Z",
+                        "Europe/Zurich",
+                        "available",
+                    )
+                    for index in (1, 2)
+                )
+                return browser_result(
+                    location,
+                    sources_by_id[location.location_id],
+                    slots=slots,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    def fetch_json(url: str) -> object:
+        fetch_calls.append(url)
+        return fixture_fetch_json(url)
+
+    try:
+        outcomes = collect_playtomic(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            fetch_json=fetch_json,
+            browser_connector_factory=browser_factory,
+        )
+
+        assert len(factory_calls) == 1
+        assert factory_calls[0] == sources
+        assert browser_calls == ["gva-palexpo", "padel-parc-etoy", "padel-station"]
+        assert [urlparse(url).path.rsplit("/", 1)[-1] for url in fetch_calls] == [
+            "padel-parc-preverenges",
+            "vaudoise-arena",
+        ]
+        assert [outcome.location_id for outcome in outcomes] == list(PLAYTOMIC_IDS)
+        assert [outcome.status for outcome in outcomes] == [
+            "unavailable",
+            "error",
+            "success",
+            "success",
+            "success",
+        ]
+        assert [outcome.slot_count for outcome in outcomes] == [0, 0, 3, 2, 3]
+        assert len(list_availability_runs(connection)) == 5
+    finally:
+        connection.close()
+
+
+def test_browser_error_keeps_previous_successful_snapshot_stale(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    locations = five_playtomic_locations()
+    sources = mixed_playtomic_sources()
+    source = next(source for source in sources if source.location_id == "padel-station")
+    attempts = 0
+
+    def browser_factory(_: Sequence[PlaytomicSource]):
+        class FakeBrowserConnector:
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 2:
+                    raise PlaytomicBrowserError("browser unavailable")
+                slots = (
+                    AvailabilitySlot(
+                        run_id,
+                        location.location_id,
+                        "station-success",
+                        "station-success",
+                        "Padel A",
+                        "2026-09-22T08:00:00Z",
+                        "2026-09-22T09:00:00Z",
+                        "Europe/Zurich",
+                        "available",
+                    ),
+                )
+                return browser_result(
+                    location,
+                    source,
+                    slots=slots,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_playtomic(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            location_id="padel-station",
+            browser_connector_factory=browser_factory,
+        )
+        outcomes = collect_playtomic(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 10, 0, tzinfo=ZURICH),
+            location_id="padel-station",
+            browser_connector_factory=browser_factory,
+        )
+
+        assert outcomes[0].status == "error"
+        snapshot = get_availability_snapshot(connection, "padel-station")
+        assert snapshot is not None
+        assert snapshot.status == "stale"
+        assert len(snapshot.slots) == 1
+        assert snapshot.latest_run.status == "error"
     finally:
         connection.close()

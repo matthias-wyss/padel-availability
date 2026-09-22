@@ -1,8 +1,8 @@
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Sequence
+from datetime import UTC, datetime
 
 from .availability import (
     AvailabilityResult,
@@ -16,6 +16,11 @@ from .connectors.playtomic import (
     PlaytomicSource,
     PlaytomicSourceError,
     fetch_public_json,
+)
+from .connectors.playtomic_browser import (
+    BrowserConnector,
+    BrowserConnectorFactory,
+    PlaytomicBrowserConnector,
 )
 from .database import save_availability_result
 from .models import LocationRecord
@@ -81,11 +86,12 @@ def collect_playtomic(
     horizon_days: int = 14,
     location_id: str | None = None,
     fetch_json: JsonFetcher = fetch_public_json,
+    browser_connector_factory: BrowserConnectorFactory | None = None,
 ) -> tuple[CollectionOutcome, ...]:
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     window_start, window_end = local_window(now, horizon_days)
-    collected_at = now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    collected_at = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
     locations_by_id = {location.location_id: location for location in locations}
     if location_id is not None:
@@ -98,11 +104,24 @@ def collect_playtomic(
     else:
         missing = _PLAYTOMIC_LOCATION_IDS - locations_by_id.keys()
         if missing:
-            raise ValueError("catalog is missing Playtomic locations: " + ", ".join(sorted(missing)))
+            raise ValueError(
+                "catalog is missing Playtomic locations: " + ", ".join(sorted(missing))
+            )
         selected = tuple(locations_by_id[item] for item in sorted(_PLAYTOMIC_LOCATION_IDS))
 
     sources_by_id = {source.location_id: source for source in sources}
-    connector = PlaytomicConnector(sources, fetch_json=fetch_json)
+    json_connector = PlaytomicConnector(sources, fetch_json=fetch_json)
+    selected_ids = {location.location_id for location in selected}
+    browser_connector: BrowserConnector | None = None
+    if any(
+        source.location_id in selected_ids and source.transport == "browser_dom"
+        for source in sources
+    ):
+        browser_connector = (
+            browser_connector_factory(sources)
+            if browser_connector_factory is not None
+            else PlaytomicBrowserConnector(sources)
+        )
     outcomes: list[CollectionOutcome] = []
     for location in selected:
         source = sources_by_id.get(location.location_id)
@@ -110,6 +129,11 @@ def collect_playtomic(
         if source_url is None:
             source_url = f"https://playtomic.com/locations/{location.location_id}"
         run_id = f"playtomic-{location.location_id}-{collected_at}"
+        if source is not None and source.transport == "browser_dom":
+            assert browser_connector is not None
+            connector = browser_connector
+        else:
+            connector = json_connector
         try:
             result = connector.collect(
                 location,

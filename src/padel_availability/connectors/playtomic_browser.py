@@ -204,9 +204,12 @@ def _slot_matches_date(external_id: str, requested_date: date) -> bool:
     if match is None:
         return False
     try:
-        slot_date = datetime.strptime(match.group(1), "%Y-%m-%dT%H-%MZ").replace(
-            tzinfo=UTC
-        ).astimezone(_ZURICH).date()
+        slot_date = (
+            datetime.strptime(match.group(1), "%Y-%m-%dT%H-%MZ")
+            .replace(tzinfo=UTC)
+            .astimezone(_ZURICH)
+            .date()
+        )
     except ValueError:
         return False
     return slot_date == requested_date
@@ -251,9 +254,7 @@ def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObserv
         raise PlaytomicBrowserError("visible slot has an invalid duration")
 
     start_local = _local_datetime(requested_date, parsed_time, "starts_at")
-    end_local = (
-        start_local.astimezone(UTC) + timedelta(minutes=duration)
-    ).astimezone(_ZURICH)
+    end_local = (start_local.astimezone(UTC) + timedelta(minutes=duration)).astimezone(_ZURICH)
     starts_at = start_local.isoformat(timespec="seconds")
     ends_at = end_local.isoformat(timespec="seconds")
     try:
@@ -428,7 +429,9 @@ def _payload_is_ready(
     if dom.get("view") != "booking" or dom.get("date") != requested_date.isoformat():
         return False
     slots = dom.get("slots")
-    if isinstance(slots, list) and _has_requested_date_slot(cast(list[object], slots), requested_date):
+    if isinstance(slots, list) and _has_requested_date_slot(
+        cast(list[object], slots), requested_date
+    ):
         return True
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
@@ -512,6 +515,18 @@ def _unavailable_result(
         "public booking page is explicitly unavailable",
     )
     return AvailabilityResult(run, ())
+
+
+class BrowserConnector(Protocol):
+    def collect(
+        self,
+        location: LocationRecord,
+        *,
+        run_id: str,
+        window_start: date,
+        window_end: date,
+        collected_at: str,
+    ) -> AvailabilityResult: ...
 
 
 class PlaytomicBrowserConnector:
@@ -610,3 +625,6 @@ class PlaytomicBrowserConnector:
             None,
         )
         return AvailabilityResult(run, slots)
+
+
+BrowserConnectorFactory = Callable[[Sequence[PlaytomicSource]], BrowserConnector]
