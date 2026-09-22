@@ -14,6 +14,7 @@ from padel_availability.availability import (
 )
 from padel_availability.collector import CollectionOutcome
 from padel_availability.connectors.airpad import AirpadSource
+from padel_availability.connectors.everness import EvernessSource
 from padel_availability.connectors.playtomic import PlaytomicSource, load_playtomic_sources
 from padel_availability.database import save_availability_result
 from padel_availability.models import LocationRecord
@@ -663,6 +664,207 @@ def test_collect_airpad_reports_missing_playwright_with_setup_guidance(
             str(database),
             "--sources",
             str(ROOT / "data/airpad_sources.json"),
+        ]
+    ) == 2
+
+    assert calls == []
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error
+
+
+def _everness_source() -> EvernessSource:
+    return EvernessSource(
+        "everness",
+        "https://padel.everness.ch/",
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+
+
+def test_collect_everness_reports_outcomes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[tuple[frozenset[str], frozenset[str], int, str | None]] = []
+    loaded_paths: list[Path] = []
+
+    def fake_load(path: Path) -> tuple[EvernessSource, ...]:
+        loaded_paths.append(path)
+        return (_everness_source(),)
+
+    def fake_collect(
+        connection: sqlite3.Connection,
+        locations: tuple[LocationRecord, ...],
+        sources: tuple[EvernessSource, ...],
+        *,
+        horizon_days: int,
+        location_id: str | None,
+    ) -> tuple[CollectionOutcome, ...]:
+        calls.append(
+            (
+                frozenset(location.location_id for location in locations),
+                frozenset(source.location_id for source in sources),
+                horizon_days,
+                location_id,
+            )
+        )
+        prior_run = AvailabilityRun(
+            "prior-everness",
+            "everness",
+            "everness_browser",
+            "https://padel.everness.ch/",
+            "2030-01-02",
+            "2030-01-16",
+            14,
+            "2029-12-01T00:00:00Z",
+            "success",
+            None,
+        )
+        prior_slot = AvailabilitySlot(
+            "prior-everness",
+            "everness",
+            "prior-slot",
+            "prior-slot",
+            "Court 1",
+            "2030-01-03T08:00:00Z",
+            "2030-01-03T09:00:00Z",
+            "Europe/Zurich",
+            "available",
+        )
+        save_availability_result(connection, AvailabilityResult(prior_run, (prior_slot,)))
+        outcome = CollectionOutcome(
+            "everness",
+            "run-everness",
+            "error",
+            0,
+            "2030-01-02",
+            "2030-01-16",
+            "temporary source failure",
+        )
+        save_availability_result(
+            connection,
+            AvailabilityResult(
+                AvailabilityRun(
+                    outcome.run_id,
+                    outcome.location_id,
+                    "everness_browser",
+                    "https://padel.everness.ch/",
+                    outcome.window_start,
+                    outcome.window_end,
+                    14,
+                    "2030-01-02T00:00:00Z",
+                    outcome.status,
+                    outcome.error,
+                ),
+                (),
+            ),
+        )
+        return (outcome,)
+
+    monkeypatch.setattr(cli, "load_everness_sources", fake_load)
+    monkeypatch.setattr(cli, "collect_everness", fake_collect)
+    monkeypatch.setattr(cli, "_check_playwright_runtime", lambda: None)
+
+    assert cli.main(["collect-everness", "--database", str(database)]) == 0
+
+    catalog_ids, source_ids, horizon_days, location_id = calls[0]
+    assert "everness" in catalog_ids
+    assert source_ids == frozenset({"everness"})
+    assert (horizon_days, location_id) == (14, None)
+    assert loaded_paths == [Path("data/everness_sources.json")]
+    assert "everness status=stale slots=1 window=2030-01-02..2030-01-16 " \
+        "error=temporary source failure last_success=2029-12-01T00:00:00Z" in capsys.readouterr().out
+
+
+def test_collect_everness_selects_exact_location(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[tuple[frozenset[str], int, str | None]] = []
+
+    def fake_collect(
+        connection: sqlite3.Connection,
+        locations: tuple[LocationRecord, ...],
+        sources: tuple[EvernessSource, ...],
+        *,
+        horizon_days: int,
+        location_id: str | None,
+    ) -> tuple[CollectionOutcome, ...]:
+        del connection
+        calls.append((frozenset(source.location_id for source in sources), horizon_days, location_id))
+        assert {location.location_id for location in locations} >= {"everness"}
+        return (CollectionOutcome("everness", "run-everness", "success", 2, "2030-01-02", "2030-01-16", None),)
+
+    def fake_load(_path: Path) -> tuple[EvernessSource, ...]:
+        return (_everness_source(),)
+
+    monkeypatch.setattr(cli, "collect_everness", fake_collect)
+    monkeypatch.setattr(cli, "load_everness_sources", fake_load)
+    monkeypatch.setattr(cli, "_check_playwright_runtime", lambda: None)
+
+    assert cli.main(
+        [
+            "collect-everness",
+            "--database",
+            str(database),
+            "--location-id",
+            "everness",
+        ]
+    ) == 0
+
+    assert calls == [(frozenset({"everness"}), 14, "everness")]
+    assert capsys.readouterr().out.splitlines() == [
+        (
+            "everness status=success slots=2 window=2030-01-02..2030-01-16 "
+            "error=none last_success=none"
+        )
+    ]
+
+
+def test_collect_everness_rejects_non_positive_days(tmp_path: Path) -> None:
+    assert cli.main(
+        [
+            "collect-everness",
+            "--database",
+            str(tmp_path / "catalog.sqlite3"),
+            "--days",
+            "0",
+        ]
+    ) == 2
+
+
+def test_collect_everness_reports_missing_playwright_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[None] = []
+
+    def missing_playwright(*_args: object, **_kwargs: object) -> tuple[CollectionOutcome, ...]:
+        calls.append(None)
+        return ()
+
+    def fake_load(_path: Path) -> tuple[EvernessSource, ...]:
+        return (_everness_source(),)
+
+    monkeypatch.setattr(cli, "collect_everness", missing_playwright)
+    monkeypatch.setattr(cli, "load_everness_sources", fake_load)
+    monkeypatch.setitem(sys.modules, "playwright", None)
+
+    assert cli.main(
+        [
+            "collect-everness",
+            "--database",
+            str(database),
         ]
     ) == 2
 

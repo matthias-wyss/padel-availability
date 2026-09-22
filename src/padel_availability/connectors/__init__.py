@@ -20,6 +20,11 @@ from .everness import (
     EvernessStatus,
     load_everness_sources,
 )
+from .everness_browser import (
+    EvernessBrowserConnector,
+    EvernessBrowserConnectorFactory,
+    EvernessBrowserError,
+)
 from .playtomic import (
     JsonFetcher,
     PlaytomicConnector,
@@ -53,6 +58,9 @@ __all__ = [
     "BrowserConnector",
     "BrowserConnectorFactory",
     "BrowserSlotObservation",
+    "EvernessBrowserConnector",
+    "EvernessBrowserConnectorFactory",
+    "EvernessBrowserError",
     "EvernessSource",
     "EvernessSourceError",
     "EvernessStatus",

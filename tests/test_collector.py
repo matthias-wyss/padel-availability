@@ -17,7 +17,7 @@ from padel_availability.availability import (
     AvailabilitySlot,
     local_window,
 )
-from padel_availability.collector import collect_airpad, collect_playtomic
+from padel_availability.collector import collect_airpad, collect_everness, collect_playtomic
 from padel_availability.connectors.airpad import (
     AirpadSource,
     AirpadSourceError,
@@ -26,6 +26,15 @@ from padel_availability.connectors.airpad import (
 from padel_availability.connectors.airpad_browser import (
     AirpadBrowserConnectorFactory,
     AirpadBrowserError,
+)
+from padel_availability.connectors.everness import (
+    EvernessSource,
+    EvernessSourceError,
+    load_everness_sources,
+)
+from padel_availability.connectors.everness_browser import (
+    EvernessBrowserConnectorFactory,
+    EvernessBrowserError,
 )
 from padel_availability.connectors.playtomic import (
     PlaytomicSource,
@@ -96,6 +105,18 @@ def four_airpad_locations() -> tuple[LocationRecord, ...]:
 
 def four_airpad_sources() -> tuple[AirpadSource, ...]:
     return load_airpad_sources(ROOT / "data/airpad_sources.json")
+
+
+def everness_location() -> LocationRecord:
+    return next(
+        location
+        for location in load_locations(ROOT / "data/verified_locations.json")
+        if location.location_id == "everness"
+    )
+
+
+def everness_sources() -> tuple[EvernessSource, ...]:
+    return load_everness_sources(ROOT / "data/everness_sources.json")
 
 
 def mixed_playtomic_sources() -> tuple[PlaytomicSource, ...]:
@@ -172,6 +193,18 @@ def ready_airpad_database(tmp_path: Path) -> sqlite3.Connection:
     )
     for location in locations:
         upsert_location(connection, location)
+    return connection
+
+
+def ready_everness_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "catalog.sqlite3")
+    initialize(connection)
+    candidates = load_candidates(ROOT / "data/candidates.json")
+    insert_candidates(
+        connection,
+        tuple(candidate for candidate in candidates if candidate.candidate_id == "everness"),
+    )
+    upsert_location(connection, everness_location())
     return connection
 
 
@@ -579,6 +612,317 @@ def test_airpad_browser_startup_error_is_persisted_for_each_site(tmp_path: Path)
         assert [outcome.status for outcome in outcomes] == ["error"] * 4
         assert [outcome.error for outcome in outcomes] == ["browser startup failed"] * 4
         assert len(list_availability_runs(connection)) == 4
+    finally:
+        connection.close()
+
+
+def everness_result(
+    location: LocationRecord,
+    source: EvernessSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "everness_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
+    )
+
+
+def test_everness_collection_runs_exact_location(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    location = everness_location()
+    sources = everness_sources()
+    factory_sources: list[Sequence[EvernessSource]] = []
+    calls: list[str] = []
+
+    def browser_factory(received_sources: Sequence[EvernessSource]):
+        factory_sources.append(received_sources)
+
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                calls.append(received_location.location_id)
+                return everness_result(
+                    received_location,
+                    sources[0],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_everness(
+            connection,
+            (location,),
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+
+        assert factory_sources == [sources]
+        assert calls == ["everness"]
+        assert [outcome.location_id for outcome in outcomes] == ["everness"]
+        assert outcomes[0].status == "success"
+        assert len(list_availability_runs(connection)) == 1
+    finally:
+        connection.close()
+
+
+def test_everness_collection_uses_zurich_window(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    location = everness_location()
+    sources = everness_sources()
+    observed: list[tuple[date, date, str]] = []
+
+    def browser_factory(_: Sequence[EvernessSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                observed.append((window_start, window_end, collected_at))
+                return everness_result(
+                    received_location,
+                    sources[0],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_everness(
+            connection,
+            (location,),
+            sources,
+            now=datetime(2026, 9, 22, 23, 30, tzinfo=UTC),
+            horizon_days=2,
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+        assert observed == [(date(2026, 9, 23), date(2026, 9, 25), "2026-09-22T23:30:00Z")]
+    finally:
+        connection.close()
+
+
+def test_everness_error_is_persisted_and_snapshot_is_stale(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    location = everness_location()
+    sources = everness_sources()
+    attempts = 0
+
+    def browser_factory(_: Sequence[EvernessSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 2:
+                    assert len(list_availability_runs(connection)) == 1
+                    raise EvernessSourceError("temporary Everness failure")
+                slot = AvailabilitySlot(
+                    run_id,
+                    received_location.location_id,
+                    "everness-slot",
+                    "everness-slot",
+                    "Court 1",
+                    "2026-09-22T08:00:00Z",
+                    "2026-09-22T09:00:00Z",
+                    "Europe/Zurich",
+                    "available",
+                )
+                return everness_result(
+                    received_location,
+                    sources[0],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                    slots=(slot,),
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_everness(
+            connection,
+            (location,),
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            location_id="everness",
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+        outcomes = collect_everness(
+            connection,
+            (location,),
+            sources,
+            now=datetime(2026, 9, 22, 10, 0, tzinfo=ZURICH),
+            location_id="everness",
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+
+        assert outcomes[0].status == "error"
+        assert outcomes[0].error == "temporary Everness failure"
+        snapshot = get_availability_snapshot(connection, "everness")
+        assert snapshot is not None
+        assert snapshot.status == "stale"
+        assert len(snapshot.slots) == 1
+        assert snapshot.latest_run.status == "error"
+    finally:
+        connection.close()
+
+
+def test_everness_browser_opens_once_and_closes(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    location = everness_location()
+    sources = everness_sources()
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[EvernessSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                assert lifecycle == ["open"]
+                return everness_result(
+                    received_location,
+                    sources[0],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_everness(
+            connection,
+            (location,),
+            sources,
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+        assert lifecycle == ["open", "close"]
+    finally:
+        connection.close()
+
+
+def test_everness_collection_rejects_unknown_location(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="unknown Everness location: padel-station"):
+            collect_everness(
+                connection,
+                (everness_location(),),
+                everness_sources(),
+                location_id="padel-station",
+            )
+    finally:
+        connection.close()
+
+
+def test_everness_collection_persists_startup_error(tmp_path: Path) -> None:
+    connection = ready_everness_database(tmp_path)
+    location = everness_location()
+    sources = everness_sources()
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[EvernessSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise EvernessBrowserError("browser startup failed")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(self, *args: object, **kwargs: object) -> AvailabilityResult:
+                raise AssertionError("collect should not run after browser startup failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_everness(
+            connection,
+            (location,),
+            sources,
+            browser_connector_factory=cast(EvernessBrowserConnectorFactory, browser_factory),
+        )
+
+        assert lifecycle == ["open", "close"]
+        assert outcomes[0].status == "error"
+        assert outcomes[0].error == "browser startup failed"
+        assert len(list_availability_runs(connection)) == 1
     finally:
         connection.close()
 
