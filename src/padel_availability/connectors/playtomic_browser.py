@@ -238,7 +238,7 @@ def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObserv
     ends_at = end_local.isoformat(timespec="seconds")
     try:
         return BrowserSlotObservation(
-            cast(str | None, external_id),
+            external_id,
             court_label,
             starts_at,
             ends_at,
@@ -520,7 +520,8 @@ def _wait_for_visible_dom(
 def _payload_has_marker(payload: object, markers: tuple[str, ...]) -> bool:
     if not isinstance(payload, Mapping):
         return False
-    visible_text = payload.get("visible_text")
+    dom = cast(Mapping[str, object], payload)
+    visible_text = dom.get("visible_text")
     if not isinstance(visible_text, str):
         return False
     normalized_text = " ".join(visible_text.split()).casefold()
@@ -656,7 +657,9 @@ class PlaytomicBrowserConnector:
             raise
         except Exception as error:
             if _is_documented_browser_error(error):
-                raise PlaytomicSourceError("browser navigation or extraction failed"[:160]) from error
+                raise PlaytomicSourceError(
+                    "browser navigation or extraction failed"[:160]
+                ) from error
             raise
 
         slots = parse_browser_observations(

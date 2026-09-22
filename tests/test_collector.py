@@ -422,6 +422,65 @@ def test_collection_selects_browser_once_saves_immediately_and_continues(
         connection.close()
 
 
+def test_browser_open_error_is_persisted_and_json_sites_continue(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    locations = five_playtomic_locations()
+    sources = mixed_playtomic_sources()
+    browser_lifecycle: list[str] = []
+    browser_calls: list[str] = []
+
+    def browser_factory(_: Sequence[PlaytomicSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                browser_lifecycle.append("open")
+                raise PlaytomicBrowserError("browser launch failed")
+
+            def close(self) -> None:
+                browser_lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                del run_id, window_start, window_end, collected_at
+                browser_calls.append(location.location_id)
+                raise AssertionError("browser collect should not run after open failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_playtomic(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            fetch_json=fixture_fetch_json,
+            browser_connector_factory=browser_factory,
+        )
+
+        by_id = {outcome.location_id: outcome for outcome in outcomes}
+        assert browser_lifecycle == ["open", "close"]
+        assert browser_calls == []
+        assert [by_id[location_id].status for location_id in PLAYTOMIC_IDS] == [
+            "error",
+            "error",
+            "success",
+            "error",
+            "success",
+        ]
+        assert by_id["gva-palexpo"].error == "browser launch failed"
+        assert by_id["padel-parc-etoy"].error == "browser launch failed"
+        assert by_id["padel-station"].error == "browser launch failed"
+        assert len(list_availability_runs(connection)) == 5
+    finally:
+        connection.close()
+
+
 def test_browser_error_keeps_previous_successful_snapshot_stale(tmp_path: Path) -> None:
     connection = ready_database(tmp_path)
     locations = five_playtomic_locations()

@@ -130,9 +130,13 @@ def collect_playtomic(
             else PlaytomicBrowserConnector(sources)
         )
     outcomes: list[CollectionOutcome] = []
+    browser_open_error: BaseException | None = None
     try:
         if browser_connector is not None and browser_session_needed:
-            browser_connector.open()
+            try:
+                browser_connector.open()
+            except (PlaytomicSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
+                browser_open_error = error
         for location in selected:
             source = sources_by_id.get(location.location_id)
             source_url = source.booking_url if source is not None else location.booking_url
@@ -144,15 +148,12 @@ def collect_playtomic(
                 connector = browser_connector
             else:
                 connector = json_connector
-            try:
-                result = connector.collect(
-                    location,
-                    run_id=run_id,
-                    window_start=window_start,
-                    window_end=window_end,
-                    collected_at=collected_at,
-                )
-            except (PlaytomicSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
+            if (
+                source is not None
+                and source.transport == "browser_dom"
+                and source.status == "public"
+                and browser_open_error is not None
+            ):
                 result = _error_result(
                     location,
                     source_url=source_url,
@@ -161,8 +162,33 @@ def collect_playtomic(
                     window_end=window_end.isoformat(),
                     horizon_days=horizon_days,
                     collected_at=collected_at,
-                    error=error,
+                    error=browser_open_error,
                 )
+            else:
+                try:
+                    result = connector.collect(
+                        location,
+                        run_id=run_id,
+                        window_start=window_start,
+                        window_end=window_end,
+                        collected_at=collected_at,
+                    )
+                except (
+                    PlaytomicSourceError,
+                    OSError,
+                    TimeoutError,
+                    json.JSONDecodeError,
+                ) as error:
+                    result = _error_result(
+                        location,
+                        source_url=source_url,
+                        run_id=run_id,
+                        window_start=window_start.isoformat(),
+                        window_end=window_end.isoformat(),
+                        horizon_days=horizon_days,
+                        collected_at=collected_at,
+                        error=error,
+                    )
 
             save_availability_result(connection, result)
             outcomes.append(
