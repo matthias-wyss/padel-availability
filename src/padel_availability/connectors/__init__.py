@@ -7,6 +7,11 @@ from .airpad import (
     AirpadSourceError,
     load_airpad_sources,
 )
+from .airpad_browser import (
+    AirpadBrowserConnector,
+    AirpadBrowserConnectorFactory,
+    AirpadBrowserError,
+)
 from .playtomic import (
     JsonFetcher,
     PlaytomicConnector,
@@ -30,6 +35,9 @@ from .playtomic_browser import (
 __all__ = [
     "AIRPAD_LOCATION_IDS",
     "AIRPAD_LOCATION_LABELS",
+    "AirpadBrowserConnector",
+    "AirpadBrowserConnectorFactory",
+    "AirpadBrowserError",
     "AirpadSource",
     "AirpadSourceError",
     "BrowserConnector",

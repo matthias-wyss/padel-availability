@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -16,7 +17,16 @@ from padel_availability.availability import (
     AvailabilitySlot,
     local_window,
 )
-from padel_availability.collector import collect_playtomic
+from padel_availability.collector import collect_airpad, collect_playtomic
+from padel_availability.connectors.airpad import (
+    AirpadSource,
+    AirpadSourceError,
+    load_airpad_sources,
+)
+from padel_availability.connectors.airpad_browser import (
+    AirpadBrowserConnectorFactory,
+    AirpadBrowserError,
+)
 from padel_availability.connectors.playtomic import (
     PlaytomicSource,
     PlaytomicSourceError,
@@ -41,6 +51,12 @@ PLAYTOMIC_IDS = (
     "padel-parc-preverenges",
     "padel-station",
     "vaudoise-arena",
+)
+AIRPAD_IDS = (
+    "airpad-la-praille",
+    "airpad-les-acacias",
+    "airpad-meyrin",
+    "airpad-plan-les-ouates",
 )
 ZURICH = ZoneInfo("Europe/Zurich")
 
@@ -70,6 +86,16 @@ def five_playtomic_sources() -> tuple[PlaytomicSource, ...]:
         )
         for source in manifest_sources
     )
+
+
+def four_airpad_locations() -> tuple[LocationRecord, ...]:
+    locations = load_locations(ROOT / "data/verified_locations.json")
+    by_id = {location.location_id: location for location in locations}
+    return tuple(by_id[location_id] for location_id in AIRPAD_IDS)
+
+
+def four_airpad_sources() -> tuple[AirpadSource, ...]:
+    return load_airpad_sources(ROOT / "data/airpad_sources.json")
 
 
 def mixed_playtomic_sources() -> tuple[PlaytomicSource, ...]:
@@ -132,9 +158,349 @@ def ready_database(tmp_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def ready_airpad_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "catalog.sqlite3")
+    initialize(connection)
+    locations = four_airpad_locations()
+    candidates = load_candidates(ROOT / "data/candidates.json")
+    candidate_ids = {
+        candidate_id for location in locations for candidate_id in location.candidate_ids
+    }
+    insert_candidates(
+        connection,
+        tuple(candidate for candidate in candidates if candidate.candidate_id in candidate_ids),
+    )
+    for location in locations:
+        upsert_location(connection, location)
+    return connection
+
+
 def fixture_fetch_json(url: str) -> object:
     location_id = urlparse(url).path.rsplit("/", 1)[-1]
     return read_fixture(location_id)
+
+
+def airpad_result(
+    location: LocationRecord,
+    source: AirpadSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "airpad_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
+    )
+
+
+def test_airpad_collection_runs_all_four_sites(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    sources_by_id = {source.location_id: source for source in sources}
+    browser_calls: list[str] = []
+    lifecycle: list[str] = []
+
+    def browser_factory(received_sources: Sequence[AirpadSource]):
+        assert received_sources == sources
+
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                browser_calls.append(location.location_id)
+                return airpad_result(
+                    location,
+                    sources_by_id[location.location_id],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        assert [outcome.location_id for outcome in outcomes] == list(AIRPAD_IDS)
+        assert [outcome.status for outcome in outcomes] == ["success"] * 4
+        assert browser_calls == list(AIRPAD_IDS)
+        assert lifecycle == ["open", "close"]
+        assert len(list_availability_runs(connection)) == 4
+    finally:
+        connection.close()
+
+
+def test_airpad_collection_selects_one_site_and_uses_zurich_window(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    calls: list[str] = []
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                calls.append(location.location_id)
+                return airpad_result(
+                    location,
+                    next(source for source in sources if source.location_id == location.location_id),
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 23, 30, tzinfo=UTC),
+            horizon_days=2,
+            location_id="airpad-meyrin",
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        assert calls == ["airpad-meyrin"]
+        assert len(outcomes) == 1
+        assert outcomes[0].window_start == "2026-09-23"
+        assert outcomes[0].window_end == "2026-09-25"
+    finally:
+        connection.close()
+
+
+def test_airpad_error_is_persisted_and_other_sites_continue(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    sources_by_id = {source.location_id: source for source in sources}
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                if location.location_id == "airpad-meyrin":
+                    assert len(list_availability_runs(connection)) == 2
+                    raise AirpadBrowserError("DOM failed")
+                return airpad_result(
+                    location,
+                    sources_by_id[location.location_id],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        failed = next(outcome for outcome in outcomes if outcome.location_id == "airpad-meyrin")
+        assert failed.status == "error"
+        assert failed.error == "DOM failed"
+        assert len(list_availability_runs(connection)) == 4
+        assert len(list_availability_runs(connection, "airpad-plan-les-ouates")) == 1
+    finally:
+        connection.close()
+
+
+def test_airpad_failed_run_keeps_previous_snapshot_stale(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    source = next(source for source in sources if source.location_id == "airpad-meyrin")
+    attempts = 0
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 2:
+                    raise AirpadSourceError("temporary source failure")
+                slot = AvailabilitySlot(
+                    run_id,
+                    location.location_id,
+                    "meyrin-slot",
+                    "meyrin-slot",
+                    "Court 1",
+                    "2026-09-22T08:00:00Z",
+                    "2026-09-22T09:00:00Z",
+                    "Europe/Zurich",
+                    "available",
+                )
+                return airpad_result(
+                    location,
+                    source,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                    slots=(slot,),
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_airpad(
+            connection,
+            (next(location for location in locations if location.location_id == "airpad-meyrin"),),
+            (source,),
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            location_id="airpad-meyrin",
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+        outcomes = collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 10, 0, tzinfo=ZURICH),
+            location_id="airpad-meyrin",
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+
+        assert outcomes[0].status == "error"
+        snapshot = get_availability_snapshot(connection, "airpad-meyrin")
+        assert snapshot is not None
+        assert snapshot.status == "stale"
+        assert len(snapshot.slots) == 1
+        assert snapshot.latest_run.status == "error"
+    finally:
+        connection.close()
+
+
+def test_airpad_browser_opens_once_and_closes_after_collection(tmp_path: Path) -> None:
+    connection = ready_airpad_database(tmp_path)
+    locations = four_airpad_locations()
+    sources = four_airpad_sources()
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[AirpadSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                assert lifecycle == ["open"]
+                source = next(source for source in sources if source.location_id == location.location_id)
+                return airpad_result(
+                    location,
+                    source,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        collect_airpad(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 22, 9, 0, tzinfo=ZURICH),
+            browser_connector_factory=cast(AirpadBrowserConnectorFactory, browser_factory),
+        )
+        assert lifecycle == ["open", "close"]
+    finally:
+        connection.close()
 
 
 def test_collection_runs_all_selected_sites_independently(tmp_path: Path) -> None:

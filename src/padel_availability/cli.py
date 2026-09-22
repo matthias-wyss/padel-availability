@@ -5,7 +5,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .collector import collect_playtomic
+from .collector import collect_airpad, collect_playtomic
+from .connectors.airpad import load_airpad_sources
 from .connectors.playtomic import load_playtomic_sources
 from .connectors.playtomic_browser import _CHROMIUM_ARGS  # pyright: ignore[reportPrivateUsage]
 from .database import (
@@ -88,6 +89,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     collect_command.add_argument("--location-id")
     collect_command.add_argument("--days", type=_positive_days, default=14)
+
+    airpad_command = commands.add_parser(
+        "collect-airpad", help="collect public AIRPAD availability manually"
+    )
+    airpad_command.add_argument("--database", required=True, type=Path)
+    airpad_command.add_argument(
+        "--sources", type=Path, default=Path("data/airpad_sources.json")
+    )
+    airpad_command.add_argument("--location-id")
+    airpad_command.add_argument("--days", type=_positive_days, default=14)
     return parser
 
 
@@ -158,6 +169,37 @@ def _run_command(arguments: argparse.Namespace) -> None:
             ):
                 _check_playwright_runtime()
             outcomes = collect_playtomic(
+                connection,
+                list_locations(connection),
+                sources,
+                horizon_days=arguments.days,
+                location_id=arguments.location_id,
+            )
+            for outcome in outcomes:
+                error = " ".join((outcome.error or "none").split())[:160]
+                snapshot = get_availability_snapshot(connection, outcome.location_id)
+                status = snapshot.status if snapshot is not None else outcome.status
+                slot_count = (
+                    len(snapshot.slots)
+                    if snapshot is not None and snapshot.status == "stale"
+                    else outcome.slot_count
+                )
+                last_success = snapshot.last_success_at if snapshot is not None else None
+                print(
+                    f"{outcome.location_id} status={status} slots={slot_count} "
+                    f"window={outcome.window_start}..{outcome.window_end} error={error} "
+                    f"last_success={last_success or 'none'}"
+                )
+            return
+        if arguments.command == "collect-airpad":
+            sources = load_airpad_sources(arguments.sources)
+            if any(
+                source.status == "public"
+                and (arguments.location_id is None or source.location_id == arguments.location_id)
+                for source in sources
+            ):
+                _check_playwright_runtime()
+            outcomes = collect_airpad(
                 connection,
                 list_locations(connection),
                 sources,

@@ -13,6 +13,7 @@ from padel_availability.availability import (
     AvailabilitySlot,
 )
 from padel_availability.collector import CollectionOutcome
+from padel_availability.connectors.airpad import AirpadSource
 from padel_availability.connectors.playtomic import PlaytomicSource, load_playtomic_sources
 from padel_availability.database import save_availability_result
 from padel_availability.models import LocationRecord
@@ -451,3 +452,153 @@ def test_collect_playtomic_does_not_require_playwright_for_unavailable_source(
     output = capsys.readouterr().out
     assert "padel-station status=unavailable" in output
     assert "error=public booking page is explicitly unavailable" in output
+
+
+def test_collect_airpad_reports_outcomes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[tuple[frozenset[str], frozenset[str], int, str | None]] = []
+
+    def fake_collect(
+        connection: sqlite3.Connection,
+        locations: tuple[LocationRecord, ...],
+        received_sources: tuple[AirpadSource, ...],
+        *,
+        horizon_days: int,
+        location_id: str | None,
+    ) -> tuple[CollectionOutcome, ...]:
+        calls.append(
+            (
+                frozenset(location.location_id for location in locations),
+                frozenset(source.location_id for source in received_sources),
+                horizon_days,
+                location_id,
+            )
+        )
+        outcomes = (
+            CollectionOutcome(
+                "airpad-la-praille", "run-praille", "error", 0,
+                "2030-01-02", "2030-01-16", "temporary source failure",
+            ),
+            CollectionOutcome(
+                "airpad-les-acacias", "run-acacias", "success", 3,
+                "2030-01-02", "2030-01-16", None,
+            ),
+            CollectionOutcome(
+                "airpad-meyrin", "run-meyrin", "unavailable", 0,
+                "2030-01-02", "2030-01-16", "public AIRPAD booking page is unavailable",
+            ),
+            CollectionOutcome(
+                "airpad-plan-les-ouates", "run-plan", "success", 1,
+                "2030-01-02", "2030-01-16", None,
+            ),
+        )
+        prior_run = AvailabilityRun(
+            "prior-praille", "airpad-la-praille", "airpad_browser",
+            "https://www.airpad.ch/reserve", "2030-01-02", "2030-01-16", 14,
+            "2029-12-01T00:00:00Z", "success", None,
+        )
+        prior_slot = AvailabilitySlot(
+            "prior-praille", "airpad-la-praille", "prior-slot", "prior-slot",
+            "Court 1", "2030-01-03T08:00:00Z", "2030-01-03T09:00:00Z",
+            "Europe/Zurich", "available",
+        )
+        save_availability_result(connection, AvailabilityResult(prior_run, (prior_slot,)))
+        for outcome in outcomes:
+            run = AvailabilityRun(
+                outcome.run_id, outcome.location_id, "airpad_browser",
+                "https://www.airpad.ch/reserve", outcome.window_start, outcome.window_end,
+                14, "2030-01-02T00:00:00Z", outcome.status, outcome.error,
+            )
+            save_availability_result(connection, AvailabilityResult(run, ()))
+        return outcomes
+
+    monkeypatch.setattr(cli, "collect_airpad", fake_collect)
+    monkeypatch.setattr(cli, "_check_playwright_runtime", lambda: None)
+
+    assert cli.main(
+        [
+            "collect-airpad",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/airpad_sources.json"),
+            "--days",
+            "14",
+        ]
+    ) == 0
+
+    catalog_ids, source_ids, horizon_days, location_id = calls[0]
+    assert catalog_ids >= {
+        "airpad-la-praille",
+        "airpad-les-acacias",
+        "airpad-meyrin",
+        "airpad-plan-les-ouates",
+    }
+    assert source_ids == frozenset(
+        {
+            "airpad-la-praille",
+            "airpad-les-acacias",
+            "airpad-meyrin",
+            "airpad-plan-les-ouates",
+        }
+    )
+    assert (horizon_days, location_id) == (14, None)
+    assert capsys.readouterr().out.splitlines() == [
+        ("airpad-la-praille status=stale slots=1 window=2030-01-02..2030-01-16 "
+         "error=temporary source failure last_success=2029-12-01T00:00:00Z"),
+        ("airpad-les-acacias status=success slots=3 window=2030-01-02..2030-01-16 "
+         "error=none last_success=2030-01-02T00:00:00Z"),
+        ("airpad-meyrin status=unavailable slots=0 window=2030-01-02..2030-01-16 "
+         "error=public AIRPAD booking page is unavailable last_success=none"),
+        ("airpad-plan-les-ouates status=success slots=1 window=2030-01-02..2030-01-16 "
+         "error=none last_success=2030-01-02T00:00:00Z"),
+    ]
+
+
+def test_collect_airpad_rejects_non_positive_days(tmp_path: Path) -> None:
+    assert cli.main(
+        [
+            "collect-airpad",
+            "--database",
+            str(tmp_path / "catalog.sqlite3"),
+            "--days",
+            "0",
+        ]
+    ) == 2
+
+
+def test_collect_airpad_reports_missing_playwright_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[None] = []
+
+    def missing_playwright(*_args: object, **_kwargs: object) -> tuple[CollectionOutcome, ...]:
+        calls.append(None)
+        return ()
+
+    monkeypatch.setattr(cli, "collect_airpad", missing_playwright)
+    monkeypatch.setitem(sys.modules, "playwright", None)
+
+    assert cli.main(
+        [
+            "collect-airpad",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/airpad_sources.json"),
+        ]
+    ) == 2
+
+    assert calls == []
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error
