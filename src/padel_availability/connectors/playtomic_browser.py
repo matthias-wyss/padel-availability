@@ -448,7 +448,7 @@ def _payload_date(payload: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _payload_content(payload: object) -> tuple[object, str] | None:
+def _payload_content(payload: object) -> tuple[object, tuple[bool, bool, bool]] | None:
     if not isinstance(payload, Mapping):
         return None
     dom = cast(Mapping[str, object], payload)
@@ -456,7 +456,12 @@ def _payload_content(payload: object) -> tuple[object, str] | None:
     normalized_text = (
         " ".join(visible_text.split()).casefold() if isinstance(visible_text, str) else ""
     )
-    return dom.get("slots"), normalized_text
+    marker_state: tuple[bool, bool, bool] = (
+        any(marker in normalized_text for marker in _NO_SLOT_MARKERS),
+        any(marker in normalized_text for marker in _UNAVAILABLE_MARKERS),
+        any(marker in normalized_text for marker in _BLOCK_MARKERS),
+    )
+    return dom.get("slots"), marker_state
 
 
 def _has_requested_date_slot(slots: list[object], requested_date: date) -> bool:

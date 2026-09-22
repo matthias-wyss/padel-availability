@@ -2,6 +2,7 @@ import os
 import re
 from dataclasses import FrozenInstanceError
 from datetime import date
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Self, cast
 
@@ -68,8 +69,199 @@ def fixture_browser() -> Any:
             os.environ["FONTCONFIG_FILE"] = previous_fontconfig
 
 
-def _fixture_payload(name: str, browser: Any) -> dict[str, Any]:
+class _HtmlElement:
+    def __init__(self, tag: str, attributes: dict[str, str], parent: "_HtmlElement | None") -> None:
+        self.tag = tag
+        self.attributes = attributes
+        self.parent_element = parent
+        self.children: list[_HtmlElement | str] = []
+
+    def descendants(self) -> list["_HtmlElement"]:
+        elements: list[_HtmlElement] = []
+        for child in self.children:
+            if isinstance(child, _HtmlElement):
+                elements.append(child)
+                elements.extend(child.descendants())
+        return elements
+
+    def query_selector_all(self, selector: str) -> list["_HtmlElement"]:
+        elements = self.descendants()
+        if selector == "div.shrink-0 .truncate":
+            return [
+                element
+                for element in elements
+                if element.tag == "div"
+                and _has_class(element, "truncate")
+                and any(
+                    ancestor.tag == "div"
+                    and _has_class(ancestor, "shrink-0")
+                    for ancestor in _ancestors(element)
+                )
+            ]
+        return [element for element in elements if _matches_selector(element, selector)]
+
+    def query_selector(self, selector: str) -> "_HtmlElement | None":
+        return next(iter(self.query_selector_all(selector)), None)
+
+    def closest(self, selector: str) -> "_HtmlElement | None":
+        current: _HtmlElement | None = self
+        while current is not None:
+            if _matches_selector(current, selector):
+                return current
+            current = current.parent_element
+        return None
+
+    def get_attribute(self, name: str) -> str | None:
+        return self.attributes.get(name)
+
+    def has_attribute(self, name: str) -> bool:
+        return name in self.attributes
+
+    def text_content(self) -> str:
+        return "".join(
+            child if isinstance(child, str) else child.text_content() for child in self.children
+        )
+
+
+class _FixtureParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.root = _HtmlElement("#document", {}, None)
+        self.current = self.root
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        element = _HtmlElement(
+            tag,
+            {name: value or "" for name, value in attrs},
+            self.current,
+        )
+        self.current.children.append(element)
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.current = element
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if self.current.tag == tag:
+            self.current = self.current.parent_element or self.root
+
+    def handle_endtag(self, tag: str) -> None:
+        current: _HtmlElement | None = self.current
+        while current is not None and current.tag != tag:
+            current = current.parent_element
+        if current is not None and current.parent_element is not None:
+            self.current = current.parent_element
+
+    def handle_data(self, data: str) -> None:
+        self.current.children.append(data)
+
+
+def _ancestors(element: _HtmlElement) -> list[_HtmlElement]:
+    ancestors: list[_HtmlElement] = []
+    current = element.parent_element
+    while current is not None:
+        ancestors.append(current)
+        current = current.parent_element
+    return ancestors
+
+
+def _has_class(element: _HtmlElement, name: str) -> bool:
+    return name in (element.get_attribute("class") or "").split()
+
+
+def _matches_selector(element: _HtmlElement, selector: str) -> bool:
+    if selector == "h2":
+        return element.tag == "h2"
+    if selector == 'input[type="date"]':
+        return element.tag == "input" and element.get_attribute("type") == "date"
+    if selector == "div.flex.border-b":
+        return (
+            element.tag == "div"
+            and _has_class(element, "flex")
+            and _has_class(element, "border-b")
+        )
+    if selector == "[data-slot-id][data-tracking-property-time][data-tracking-property-duration]":
+        return element.tag != "#document" and all(
+            element.has_attribute(attribute)
+            for attribute in (
+                "data-slot-id",
+                "data-tracking-property-time",
+                "data-tracking-property-duration",
+            )
+        )
+    return False
+
+
+def _is_visible(element: _HtmlElement) -> bool:
+    for current in [element, *_ancestors(element)]:
+        style = {
+            part.split(":", 1)[0].strip(): part.split(":", 1)[1].strip()
+            for part in (current.get_attribute("style") or "").split(";")
+            if ":" in part
+        }
+        if style.get("display") == "none" or style.get("visibility") == "hidden":
+            return False
+    return True
+
+
+class _SelectorPage:
+    def __init__(self, html: str) -> None:
+        parser = _FixtureParser()
+        parser.feed(html)
+        self.body = parser.root
+
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        del arg
+        assert expression == _VISIBLE_DOM_SCRIPT
+        headings = self.body.query_selector_all("h2")
+        heading = any(
+            _is_visible(element)
+            and re.search(
+                r"available courts|terrains disponibles", element.text_content(), re.IGNORECASE
+            )
+            is not None
+            for element in headings
+        )
+        date_controls = [
+            element
+            for element in self.body.query_selector_all('input[type="date"]')
+            if element.parent_element is not None and _is_visible(element.parent_element)
+        ]
+        dates = [element.get_attribute("value") or "" for element in date_controls]
+        date_value = dates[0] if dates and all(value == dates[0] for value in dates) else ""
+        slots: list[dict[str, Any]] = []
+        for element in self.body.query_selector_all(
+            "[data-slot-id][data-tracking-property-time][data-tracking-property-duration]"
+        ):
+            if not _is_visible(element):
+                continue
+            row = element.closest("div.flex.border-b")
+            court = row.query_selector("div.shrink-0 .truncate") if row is not None else None
+            slots.append(
+                {
+                    "external_id": element.get_attribute("data-slot-id"),
+                    "time": element.get_attribute("data-tracking-property-time"),
+                    "duration": element.get_attribute("data-tracking-property-duration"),
+                    "class": element.get_attribute("class") or "",
+                    "disabled": element.has_attribute("disabled")
+                    or element.get_attribute("aria-disabled") == "true",
+                    "court": court.text_content().strip() if court is not None else None,
+                }
+            )
+        return {
+            "view": "booking" if heading else "unknown",
+            "date": date_value,
+            "dates": dates,
+            "slots": slots,
+            "visible_text": self.body.text_content(),
+        }
+
+
+def _fixture_payload(name: str, browser: Any | None = None) -> dict[str, Any]:
     html = (FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8")
+    if browser is None:
+        payload = _SelectorPage(html).evaluate(_VISIBLE_DOM_SCRIPT)
+        assert isinstance(payload, dict)
+        return cast(dict[str, Any], payload)
     context = browser.new_context()
     page = context.new_page()
     try:
@@ -141,9 +333,9 @@ class _FakeBrowser:
 
 
 @pytest.mark.parametrize("fixture_name", FIXTURE_NAMES)
-def test_observed_fixture_returns_a_visible_slot(fixture_name: str, fixture_browser: Any) -> None:
+def test_observed_fixture_returns_a_visible_slot(fixture_name: str) -> None:
     observations = parse_visible_dom(
-        _fixture_payload(fixture_name, fixture_browser), date(2026, 9, 22)
+        _fixture_payload(fixture_name), date(2026, 9, 22)
     )
 
     assert len(observations) == 1
@@ -152,8 +344,8 @@ def test_observed_fixture_returns_a_visible_slot(fixture_name: str, fixture_brow
     assert observations[0].status == "available"
 
 
-def test_page_extractor_reads_only_the_visible_dom_payload(fixture_browser: Any) -> None:
-    page = _FakePage(_fixture_payload("padel-station", fixture_browser))
+def test_page_extractor_reads_only_the_visible_dom_payload() -> None:
+    page = _FakePage(_fixture_payload("padel-station"))
 
     observations = extract_browser_observations(page, date(2026, 9, 22))
 
@@ -233,6 +425,7 @@ def test_changed_date_stale_no_slots_state_does_not_make_the_requested_date_read
         **previous_payload,
         "date": "2026-09-23",
         "dates": ["2026-09-23"],
+        "visible_text": "Available courts No available courts Wed, Sep 23",
     }
 
     assert not _payload_is_ready(stale_payload, date(2026, 9, 23), previous_payload)
