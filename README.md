@@ -80,6 +80,24 @@ or login pages become explicit `error` outcomes; they are not bypassed. Each
 outcome is persisted locally. An `error` or `unavailable` outcome keeps the
 previous successful snapshot as stale rather than replacing its slots.
 
+Collect the four AIRPAD availability snapshots manually:
+
+```bash
+uv run padel-availability collect-airpad \
+  --database var/catalog.sqlite3 \
+  --sources data/airpad_sources.json \
+  --days 14
+```
+
+This command opens the public Doinsport iframe through the AIRPAD reservation
+page and is read-only, sequential, and manual. It does not book courts, use
+credentials, or run in the background. Browser state is ephemeral and is not
+saved between runs. CAPTCHA or login pages become explicit `error` outcomes;
+they are not bypassed. This activation includes exactly the four AIRPAD sites
+in `data/airpad_sources.json`; `cherpines` is explicitly excluded. Each
+outcome is persisted locally, and an `error` or `unavailable` outcome keeps the
+previous successful snapshot as stale rather than replacing its slots.
+
 `reports/inventory.md` remains the separate static inventory report; it is not
 an availability report.
 
