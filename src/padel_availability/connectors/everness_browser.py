@@ -1,19 +1,25 @@
 import re
-from collections.abc import Mapping, Sequence
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import pairwise
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 from zoneinfo import ZoneInfo
 
-from ..availability import AvailabilitySlot
-from .everness import EvernessSourceError
+from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot
+from ..models import LocationRecord
+from .everness import EvernessSource, EvernessSourceError
 from .playtomic_browser import (
+    BrowserFactory,
     BrowserSlotObservation,
+    _is_documented_browser_error,  # pyright: ignore[reportPrivateUsage]
     default_browser_factory,
     parse_browser_observations,
 )
 
 __all__ = [
+    "EvernessBrowserConnector",
+    "EvernessBrowserConnectorFactory",
     "EvernessBrowserError",
     "default_browser_factory",
     "parse_everness_dom",
@@ -37,6 +43,7 @@ _EVERNESS_MONTHS = {
 }
 _EVERNESS_BLOCK_MARKERS = ("captcha", "log in", "login", "sign in", "access denied")
 _EVERNESS_LOADING_MARKERS = ("loading", "chargement", "please wait", "updating")
+_EVERNESS_TIMEOUT_MS = 15_000
 _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
 () => {
   const body = document.body;
@@ -263,3 +270,328 @@ def parse_everness_observations(
         window_start=window_start,
         window_end=window_end,
     )
+
+
+class _EvernessLocator(Protocol):
+    def locator(self, selector: str) -> "_EvernessLocator": ...
+
+    def nth(self, index: int) -> "_EvernessLocator": ...
+
+    def count(self) -> int: ...
+
+    def is_visible(self) -> bool: ...
+
+    def inner_text(self) -> str: ...
+
+    def get_attribute(self, name: str) -> str | None: ...
+
+    def click(self) -> None: ...
+
+
+class _EvernessPage(Protocol):
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
+
+    def locator(self, selector: str) -> _EvernessLocator: ...
+
+    def wait_for_timeout(self, timeout: int) -> None: ...
+
+    def evaluate(self, expression: str, arg: object = None) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _EvernessContext(Protocol):
+    def new_page(self) -> _EvernessPage: ...
+
+    def close(self) -> None: ...
+
+
+class _EvernessBrowser(Protocol):
+    def new_context(self) -> _EvernessContext: ...
+
+    def __exit__(self, *args: object) -> None: ...
+
+
+def _everness_visible_locator(
+    root: _EvernessPage | _EvernessLocator, selector: str
+) -> _EvernessLocator:
+    locator = root.locator(selector)
+    if locator.count() != 1 or not locator.is_visible():
+        raise EvernessBrowserError(f"visible Everness control {selector} was not found")
+    return locator
+
+
+def _everness_payload_text(payload: object) -> str:
+    dom = _dom_mapping(payload)
+    visible_text = dom.get("visible_text")
+    if not isinstance(visible_text, str):
+        raise EvernessBrowserError("visible DOM is missing visible text")
+    normalized_text = " ".join(visible_text.split()).casefold()
+    if any(marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS):
+        raise EvernessBrowserError("public Everness page is blocked by login or CAPTCHA")
+    return normalized_text
+
+
+def _everness_payload_date(payload: object) -> date | None:
+    value = _dom_mapping(payload).get("date_label")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise EvernessBrowserError("visible DOM has an invalid date label")
+    return _parse_date_label(value)
+
+
+def _everness_payload_fingerprint(payload: object) -> str:
+    value = _dom_mapping(payload).get("grid_fingerprint")
+    if not isinstance(value, str) or not value.strip():
+        raise EvernessBrowserError("visible DOM is missing grid fingerprint")
+    return value
+
+
+def _everness_payload_loading(payload: object) -> bool:
+    dom = _dom_mapping(payload)
+    loading = dom.get("loading")
+    if not isinstance(loading, bool):
+        raise EvernessBrowserError("visible DOM has an invalid loading state")
+    normalized_text = _everness_payload_text(payload)
+    return loading or any(marker in normalized_text for marker in _EVERNESS_LOADING_MARKERS)
+
+
+def _wait_for_everness_locator(
+    page: _EvernessPage, selector: str, timeout_ms: int
+) -> _EvernessLocator:
+    for _ in range(max(1, timeout_ms // 100)):
+        locator = page.locator(selector)
+        if locator.count() == 1 and locator.is_visible():
+            return locator
+        page.wait_for_timeout(100)
+    raise EvernessBrowserError(f"visible Everness control {selector} was not found")
+
+
+def _wait_for_everness_page(page: _EvernessPage, timeout_ms: int) -> object:
+    for _ in range(max(1, timeout_ms // 100)):
+        payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+        _everness_payload_text(payload)
+        if (
+            page.locator("#table_reservation").count() == 1
+            and page.locator("#table_reservation").is_visible()
+            and page.locator("#datepicker").count() == 1
+            and page.locator("#datepicker").is_visible()
+            and page.locator("#multi-language-date").count() == 1
+            and page.locator("#multi-language-date").is_visible()
+        ):
+            return payload
+        page.wait_for_timeout(100)
+    raise EvernessBrowserError("visible Everness booking controls were not found")
+
+
+def _datepicker_month(value: str) -> tuple[int, int]:
+    match = re.fullmatch(r"([A-Za-z]+)\s+([0-9]{4})", value.strip())
+    if match is None:
+        raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
+    month_name = match.group(1).casefold()
+    month = next(
+        (number for name, number in _EVERNESS_MONTHS.items() if month_name.startswith(name.casefold())),
+        None,
+    )
+    if month is None:
+        raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
+    return month, int(match.group(2))
+
+
+def _select_everness_date(
+    page: _EvernessPage, requested_date: date, timeout_ms: int
+) -> None:
+    datepicker = _wait_for_everness_locator(page, "#datepicker", timeout_ms)
+    for _ in range(24):
+        switch = _everness_visible_locator(datepicker, ".datepicker-switch")
+        month, year = _datepicker_month(switch.inner_text())
+        current = date(year, month, 1)
+        target = date(requested_date.year, requested_date.month, 1)
+        if current == target:
+            days = datepicker.locator(".day")
+            matches: list[_EvernessLocator] = []
+            for index in range(days.count()):
+                day = days.nth(index)
+                classes = (day.get_attribute("class") or "").split()
+                if (
+                    day.is_visible()
+                    and day.inner_text().strip() == str(requested_date.day)
+                    and not {"old", "new", "disabled"}.intersection(classes)
+                ):
+                    matches.append(day)
+            if len(matches) != 1:
+                raise EvernessBrowserError("visible Everness date control was ambiguous")
+            matches[0].click()
+            return
+        selector = ".next" if current < target else ".prev"
+        _everness_visible_locator(datepicker, selector).click()
+    raise EvernessBrowserError("visible Everness datepicker could not reach requested date")
+
+
+def _wait_for_everness_date(
+    page: _EvernessPage,
+    requested_date: date,
+    previous_payload: object,
+    timeout_ms: int,
+) -> object:
+    previous_date = _everness_payload_date(previous_payload)
+    previous_fingerprint = _everness_payload_fingerprint(previous_payload)
+    refresh_observed = False
+    for _ in range(max(1, timeout_ms // 100)):
+        payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+        _everness_payload_text(payload)
+        loading = _everness_payload_loading(payload)
+        refresh_observed = refresh_observed or loading
+        label = _everness_visible_locator(page, "#multi-language-date").inner_text()
+        label_date = _parse_date_label(label)
+        payload_date = _everness_payload_date(payload)
+        if (
+            not loading
+            and label_date == requested_date
+            and payload_date == requested_date
+            and (
+                previous_date == requested_date
+                or refresh_observed
+                or _everness_payload_fingerprint(payload) != previous_fingerprint
+            )
+        ):
+            return payload
+        page.wait_for_timeout(100)
+    raise EvernessBrowserError("timed out waiting for requested date and refreshed Everness grid")
+
+
+def _unavailable_result(
+    source_url: str,
+    location_id: str,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+) -> AvailabilityResult:
+    run = AvailabilityRun(
+        run_id,
+        location_id,
+        "everness_browser",
+        source_url,
+        window_start.isoformat(),
+        window_end.isoformat(),
+        (window_end - window_start).days,
+        collected_at,
+        "unavailable",
+        "public Everness booking page is unavailable",
+    )
+    return AvailabilityResult(run, ())
+
+
+class EvernessBrowserConnector:
+    def __init__(
+        self,
+        sources: Sequence[EvernessSource],
+        *,
+        browser_factory: BrowserFactory = default_browser_factory,
+        timeout_ms: int = _EVERNESS_TIMEOUT_MS,
+    ) -> None:
+        self._sources = {source.location_id: source for source in sources}
+        self._browser_factory = browser_factory
+        self._timeout_ms = timeout_ms
+        self._browser: _EvernessBrowser | None = None
+
+    def open(self) -> None:
+        if self._browser is not None:
+            return
+        session = self._browser_factory()
+        try:
+            browser = session.__enter__()
+        except BaseException:
+            session.__exit__(*sys.exc_info())
+            raise
+        self._browser = cast(_EvernessBrowser, browser)
+
+    def close(self) -> None:
+        browser = self._browser
+        self._browser = None
+        if browser is not None:
+            browser.__exit__(None, None, None)
+
+    def collect(
+        self,
+        location: LocationRecord,
+        *,
+        run_id: str,
+        window_start: date,
+        window_end: date,
+        collected_at: str,
+    ) -> AvailabilityResult:
+        if window_end <= window_start:
+            raise EvernessSourceError("requested date window is invalid")
+        source = self._sources.get(location.location_id)
+        if source is None:
+            raise EvernessSourceError("no source metadata for location")
+        if source.status == "unavailable":
+            return _unavailable_result(
+                source.booking_url,
+                location.location_id,
+                run_id,
+                window_start,
+                window_end,
+                collected_at,
+            )
+
+        observations: list[BrowserSlotObservation] = []
+        try:
+            self.open()
+            browser = self._browser
+            if browser is None:
+                raise EvernessBrowserError("browser session is not running")
+            context = browser.new_context()
+            try:
+                page = context.new_page()
+                try:
+                    page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
+                    _wait_for_everness_page(page, self._timeout_ms)
+                    current_date = window_start
+                    while current_date < window_end:
+                        previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+                        _select_everness_date(page, current_date, self._timeout_ms)
+                        payload = _wait_for_everness_date(
+                            page, current_date, previous_payload, self._timeout_ms
+                        )
+                        observations.extend(parse_everness_dom(payload, current_date))
+                        current_date += timedelta(days=1)
+                finally:
+                    page.close()
+            finally:
+                context.close()
+        except (EvernessBrowserError, EvernessSourceError):
+            raise
+        except Exception as error:
+            if isinstance(error, RuntimeError) or _is_documented_browser_error(error):
+                raise EvernessSourceError("browser navigation or extraction failed") from error
+            raise
+
+        slots = parse_everness_observations(
+            tuple(observations),
+            location_id=location.location_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        run = AvailabilityRun(
+            run_id,
+            location.location_id,
+            "everness_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            "success",
+            None,
+        )
+        return AvailabilityResult(run, slots)
+
+
+EvernessBrowserConnectorFactory = Callable[
+    [Sequence[EvernessSource]], EvernessBrowserConnector
+]
