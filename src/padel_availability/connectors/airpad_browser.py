@@ -20,11 +20,6 @@ _AIRPAD_BLOCK_MARKERS = (
     "login",
     "access denied",
 )
-_AIRPAD_EMPTY_MARKERS = (
-    "aucun créneau disponible",
-    "no available slots",
-    "no availability",
-)
 
 
 class AirpadBrowserError(AirpadSourceError):
@@ -59,11 +54,16 @@ _AIRPAD_VISIBLE_DOM_SCRIPT = r"""
     return `${match[3]}-${String(month).padStart(2, '0')}-${String(match[2]).padStart(2, '0')}`;
   };
   const dateButtons = Array.from(body.querySelectorAll('.date-slot')).filter(visible);
-  const activeDate = dateButtons.find(element =>
+  const selectedDates = dateButtons.filter(element =>
     element.getAttribute('aria-current') === 'date' ||
     (element.getAttribute('class') || '').split(/\s+/).includes('active')
-  ) || dateButtons[0];
+  );
+  const activeDate = selectedDates.length === 1 ? selectedDates[0] : null;
   const rows = Array.from(body.querySelectorAll('.playground-slot')).filter(visible);
+  const courtRows = rows.filter(row => {
+    const title = row.querySelector('.section-title');
+    return title && visible(title) && text(title);
+  });
   const slots = [];
   const emptyRows = [];
   for (const row of rows) {
@@ -77,7 +77,7 @@ _AIRPAD_VISIBLE_DOM_SCRIPT = r"""
     );
     const empty = Boolean(row.querySelector('.empty_playground')) &&
       visible(row.querySelector('.empty_playground'));
-    if (empty) emptyRows.push(court);
+    if (empty && court) emptyRows.push(court);
     for (const card of cards) {
       const classes = card.getAttribute('class') || '';
       slots.push({
@@ -98,8 +98,9 @@ _AIRPAD_VISIBLE_DOM_SCRIPT = r"""
     view: calendar && dateButtons.length > 0 ? 'booking' : 'unknown',
     date: activeDate ? dateFromLabel(activeDate.getAttribute('aria-label') || '') : '',
     slots,
-    empty_grid: rows.length > 0 && slots.length === 0,
+    empty_grid: courtRows.length > 0 && courtRows.length === rows.length && slots.length === 0,
     empty_rows: emptyRows,
+    invalid_rows: courtRows.length !== rows.length,
     visible_text: body.innerText || ''
   };
 }
@@ -180,6 +181,15 @@ def _parse_airpad_slot(item: object, requested_date: date) -> BrowserSlotObserva
         raise AirpadBrowserError("visible slot failed validation") from error
 
 
+def _has_valid_court_rows(value: object, *, require_one: bool = False) -> bool:
+    if not isinstance(value, list):
+        return False
+    rows = cast(list[object], value)
+    return (not require_one or bool(rows)) and all(
+        isinstance(row, str) and row.strip() for row in rows
+    )
+
+
 def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlotObservation, ...]:
     """Parse the small visible-DOM payload returned by the AIRPAD iframe."""
     dom = _dom_mapping(payload)
@@ -201,9 +211,16 @@ def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlot
     )
     if observations:
         return observations
-    if dom.get("empty_grid") is True or dom.get("empty_rows"):
+    if dom.get("invalid_rows") is True:
+        raise AirpadBrowserError("visible booking row is missing court label")
+    empty_rows = dom.get("empty_rows")
+    if dom.get("empty_grid") is True:
+        if not _has_valid_court_rows(empty_rows, require_one=True):
+            raise AirpadBrowserError("visible empty grid is missing court label")
         return ()
-    if any(marker in normalized_text for marker in _AIRPAD_EMPTY_MARKERS):
+    if empty_rows:
+        if not _has_valid_court_rows(empty_rows):
+            raise AirpadBrowserError("visible booking row is missing court label")
         return ()
     raise AirpadBrowserError("visible AIRPAD booking view has no explicit availability state")
 

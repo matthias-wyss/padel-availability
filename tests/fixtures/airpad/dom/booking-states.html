@@ -1,0 +1,30 @@
+<main class="calendar-block">
+  <nav>
+    <button class="date-slot" aria-label="September 21, 2026">
+      Mon 21
+    </button>
+    <button class="date-slot active" aria-label="September 22, 2026" aria-current="date">
+      Tue 22
+    </button>
+  </nav>
+  <div class="playground-slot">
+    <div class="section-title">Terrain 1</div>
+    <div class="info-playground">
+      <button class="duration-card available" data-slot-id="available-slot">
+        <span>Start 09:00</span><span>60 min</span>
+      </button>
+      <button class="duration-card unavailable" data-slot-id="unavailable-slot">
+        <span>Start 10:00</span><span>60 min</span>
+      </button>
+      <button class="duration-card pending" data-slot-id="unknown-slot">
+        <span>Start 11:00</span><span>60 min</span>
+      </button>
+      <button class="duration-card available" data-slot-id="disabled-slot" disabled>
+        <span>Start 12:00</span><span>60 min</span>
+      </button>
+      <button class="duration-card available" data-slot-id="hidden-slot" style="display:none">
+        <span>Start 13:00</span><span>60 min</span>
+      </button>
+    </div>
+  </div>
+</main>
