@@ -1,20 +1,22 @@
+import os
 import re
 from dataclasses import FrozenInstanceError
 from datetime import date
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import pytest
 
 from padel_availability.availability import AvailabilitySlot
 from padel_availability.connectors.playtomic import PlaytomicSource, PlaytomicSourceError
 from padel_availability.connectors.playtomic_browser import (
-    _CHROMIUM_ARGS,
-    _VISIBLE_DOM_SCRIPT,
+    _CHROMIUM_ARGS,  # pyright: ignore[reportPrivateUsage]
+    _VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     BrowserSlotObservation,
     PlaytomicBrowserConnector,
     PlaytomicBrowserError,
-    _payload_is_ready,
+    _payload_is_ready,  # pyright: ignore[reportPrivateUsage]
+    _select_date,  # pyright: ignore[reportPrivateUsage]
     extract_browser_observations,
     parse_browser_observations,
     parse_visible_dom,
@@ -22,6 +24,7 @@ from padel_availability.connectors.playtomic_browser import (
 from padel_availability.models import ModelError
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "playtomic" / "dom"
+FONTCONFIG_FILE = Path(__file__).parent / "fixtures" / "fontconfig.conf"
 FIXTURE_NAMES = (
     "padel-station",
     "gva-palexpo",
@@ -31,33 +34,45 @@ FIXTURE_NAMES = (
 )
 
 
-def _fixture_payload(name: str) -> dict[str, Any]:
+@pytest.fixture(scope="module")
+def fixture_browser() -> Any:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as error:
+        pytest.skip(f"Playwright is unavailable: {error}")
+
+    os.environ["FONTCONFIG_FILE"] = str(FONTCONFIG_FILE)
+    playwright = sync_playwright().start()
+    browser = None
+    try:
+        try:
+            browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_ARGS))
+        except PlaywrightError as error:
+            pytest.skip(f"Playwright browser is unavailable: {error}")
+        yield browser
+    finally:
+        if browser is not None:
+            browser.close()
+        playwright.stop()
+        os.environ.pop("FONTCONFIG_FILE", None)
+
+
+def _fixture_payload(name: str, browser: Any) -> dict[str, Any]:
     html = (FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8")
-    date_value = re.search(r'<input type="date" value="([^"]+)"', html)
-    court = re.search(r'class="truncate">([^<]+)', html)
-    slot = re.search(
-        r'data-tracking-property-time="([^"]+)"\s+'
-        r'data-tracking-property-duration="([^"]+)"\s+'
-        r'data-slot-id="([^"]+)"\s+class="([^"]+)"',
-        html,
-    )
-    assert date_value and court and slot
-    return {
-        "view": "booking",
-        "date": date_value.group(1),
-        "court": court.group(1),
-        "slots": [
-            {
-                "external_id": slot.group(3),
-                "time": slot.group(1),
-                "duration": slot.group(2),
-                "class": slot.group(4),
-                "court": court.group(1),
-                "disabled": False,
-            }
-        ],
-        "visible_text": html,
-    }
+    context = browser.new_context()
+    page = context.new_page()
+    try:
+        page.set_content(html)
+        page.add_style_tag(
+            content="[data-slot-id] { display: block; width: 100px; height: 20px; }"
+        )
+        payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
+        assert isinstance(payload, dict)
+        return cast(dict[str, Any], payload)
+    finally:
+        page.close()
+        context.close()
 
 
 class _FakePage:
@@ -74,10 +89,11 @@ class _FakePage:
     def wait_for_timeout(self, timeout: int) -> None:
         self.calls.append(("wait", timeout))
 
-    def evaluate(self, script: str, arg: object = None) -> object:
-        self.calls.append((script, arg))
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        self.calls.append((expression, arg))
         if arg is not None and isinstance(arg, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", arg):
             self.payload["date"] = arg
+            return True
         return self.payload
 
     def close(self) -> None:
@@ -115,8 +131,10 @@ class _FakeBrowser:
 
 
 @pytest.mark.parametrize("fixture_name", FIXTURE_NAMES)
-def test_observed_fixture_returns_a_visible_slot(fixture_name: str) -> None:
-    observations = parse_visible_dom(_fixture_payload(fixture_name), date(2026, 9, 22))
+def test_observed_fixture_returns_a_visible_slot(fixture_name: str, fixture_browser: Any) -> None:
+    observations = parse_visible_dom(
+        _fixture_payload(fixture_name, fixture_browser), date(2026, 9, 22)
+    )
 
     assert len(observations) == 1
     assert observations[0].court_label
@@ -124,8 +142,8 @@ def test_observed_fixture_returns_a_visible_slot(fixture_name: str) -> None:
     assert observations[0].status == "available"
 
 
-def test_page_extractor_reads_only_the_visible_dom_payload() -> None:
-    page = _FakePage(_fixture_payload("padel-station"))
+def test_page_extractor_reads_only_the_visible_dom_payload(fixture_browser: Any) -> None:
+    page = _FakePage(_fixture_payload("padel-station", fixture_browser))
 
     observations = extract_browser_observations(page, date(2026, 9, 22))
 
@@ -164,10 +182,32 @@ def test_booking_shell_without_slots_is_not_ready() -> None:
     )
 
 
+def test_old_date_slots_do_not_make_the_requested_date_ready() -> None:
+    assert not _payload_is_ready(
+        {
+            "view": "booking",
+            "date": "2026-09-23",
+            "dates": ["2026-09-23"],
+            "slots": [
+                {
+                    "external_id": "slot-2026-09-22T13-30Z-90",
+                    "time": "3:30 PM",
+                    "duration": "90",
+                    "class": "bg-white",
+                    "disabled": False,
+                }
+            ],
+            "visible_text": "Available courts",
+        },
+        date(2026, 9, 23),
+    )
+
+
 def test_explicit_no_slots_marker_returns_empty_tuple() -> None:
     payload = {
         "view": "booking",
         "date": "2026-09-22",
+        "dates": ["2026-09-22"],
         "slots": [],
         "visible_text": "Available courts No available courts",
     }
@@ -179,6 +219,7 @@ def test_disabled_slot_is_not_reported_as_available() -> None:
     payload = {
         "view": "booking",
         "date": "2026-09-22",
+        "dates": ["2026-09-22"],
         "slots": [
             {
                 "external_id": "disabled-slot",
@@ -199,6 +240,7 @@ def test_login_or_captcha_marker_is_a_bounded_error(marker: str) -> None:
     payload = {
         "view": "booking",
         "date": "2026-09-22",
+        "dates": ["2026-09-22"],
         "slots": [],
         "visible_text": marker,
     }
@@ -210,18 +252,54 @@ def test_login_or_captcha_marker_is_a_bounded_error(marker: str) -> None:
 def test_missing_visible_contract_is_an_error() -> None:
     with pytest.raises(PlaytomicBrowserError, match="booking view"):
         parse_visible_dom(
-            {"view": "unknown", "date": "2026-09-22", "slots": [], "visible_text": ""},
+            {
+                "view": "unknown",
+                "date": "2026-09-22",
+                "dates": ["2026-09-22"],
+                "slots": [],
+                "visible_text": "",
+            },
             date(2026, 9, 22),
         )
+
+
+def test_divergent_visible_date_controls_are_an_error() -> None:
+    with pytest.raises(PlaytomicBrowserError, match="divergent"):
+        parse_visible_dom(
+            {
+                "view": "booking",
+                "date": "",
+                "dates": ["2026-09-22", "2026-09-23"],
+                "slots": [],
+                "visible_text": "Available courts No available courts",
+            },
+            date(2026, 9, 22),
+        )
+
+
+def test_selection_script_rejects_divergent_visible_date_controls(fixture_browser: Any) -> None:
+    context = fixture_browser.new_context()
+    page = context.new_page()
+    try:
+        page.set_content(
+            '<input type="date" value="2026-09-22" style="display:block">'
+            '<input type="date" value="2026-09-23" style="display:block">'
+        )
+        with pytest.raises(PlaytomicBrowserError, match="divergent"):
+            _select_date(page, date(2026, 9, 24))
+    finally:
+        page.close()
+        context.close()
 
 
 def test_ambiguous_local_time_is_an_error() -> None:
     payload = {
         "view": "booking",
         "date": "2026-10-25",
+        "dates": ["2026-10-25"],
         "slots": [
             {
-                "external_id": "ambiguous-slot",
+                "external_id": "ambiguous-2026-10-25T00-30Z-60",
                 "time": "2:30 AM",
                 "duration": "60",
                 "class": "bg-white",
@@ -236,9 +314,57 @@ def test_ambiguous_local_time_is_an_error() -> None:
         parse_visible_dom(payload, date(2026, 10, 25))
 
 
-def test_browser_connector_maps_success_and_closes_everything() -> None:
+def test_spring_forward_adds_duration_in_elapsed_time() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-03-29",
+        "dates": ["2026-03-29"],
+        "slots": [
+            {
+                "external_id": "spring-2026-03-29T00-30Z-120",
+                "time": "1:30 AM",
+                "duration": "120",
+                "class": "bg-white",
+                "court": "Padel 1",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+
+    observation = parse_visible_dom(payload, date(2026, 3, 29))[0]
+
+    assert observation.starts_at == "2026-03-29T01:30:00+01:00"
+    assert observation.ends_at == "2026-03-29T04:30:00+02:00"
+
+
+def test_fall_back_adds_duration_in_elapsed_time() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-10-25",
+        "dates": ["2026-10-25"],
+        "slots": [
+            {
+                "external_id": "fall-2026-10-25T00-30Z-120",
+                "time": "1:30 AM",
+                "duration": "120",
+                "class": "bg-white",
+                "court": "Padel 1",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+
+    observation = parse_visible_dom(payload, date(2026, 10, 25))[0]
+
+    assert observation.starts_at == "2026-10-25T01:30:00+02:00"
+    assert observation.ends_at == "2026-10-25T02:30:00+01:00"
+
+
+def test_browser_connector_maps_success_and_closes_everything(fixture_browser: Any) -> None:
     events: list[str] = []
-    page = _FakePage(_fixture_payload("gva-palexpo"))
+    page = _FakePage(_fixture_payload("gva-palexpo", fixture_browser))
     browser = _FakeBrowser(_FakeContext(page, events), events)
     source = PlaytomicSource(
         "gva-palexpo",

@@ -1,7 +1,7 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal, Protocol, Self, cast
 from zoneinfo import ZoneInfo
 
@@ -34,9 +34,10 @@ _VISIBLE_DOM_SCRIPT = """
   const heading = Array.from(body.querySelectorAll('h2')).some(element =>
     visible(element) && /available courts|terrains disponibles/i.test(element.innerText || '')
   );
-  const dates = Array.from(body.querySelectorAll('input[type="date"]'))
+  const dateControls = Array.from(body.querySelectorAll('input[type="date"]'))
     .filter(element => element.parentElement && visible(element.parentElement))
-    .map(element => element.value).filter(Boolean);
+  const dates = dateControls.map(element => element.value);
+  const date = dates.length > 0 && dates.every(value => value === dates[0]) ? dates[0] : '';
   const slots = Array.from(body.querySelectorAll(
     '[data-slot-id][data-tracking-property-time][data-tracking-property-duration]'
   )).filter(visible).map(element => {
@@ -50,7 +51,7 @@ _VISIBLE_DOM_SCRIPT = """
       court: row?.querySelector('div.shrink-0 .truncate')?.textContent?.trim() || null
     };
   });
-  return {view: heading ? 'booking' : 'unknown', date: dates[0] || '', slots, visible_text: body.innerText || ''};
+  return {view: heading ? 'booking' : 'unknown', date, dates, slots, visible_text: body.innerText || ''};
 }
 """
 _SELECT_DATE_SCRIPT = """
@@ -64,8 +65,11 @@ value => {
     }
     return true;
   };
-  for (const input of document.querySelectorAll('input[type="date"]')) {
-    if (!visible(input.parentElement)) continue;
+  const inputs = Array.from(document.querySelectorAll('input[type="date"]'))
+    .filter(input => input.parentElement && visible(input.parentElement));
+  const values = inputs.map(input => input.value);
+  if (new Set(values).size > 1) return false;
+  for (const input of inputs) {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     setter?.call(input, value);
     input.dispatchEvent(new Event('input', {bubbles: true}));
@@ -146,11 +150,6 @@ def _observation_timestamp(value: object, field: str) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ModelError(f"{field} must be an offset-aware ISO-8601 timestamp")
 
-    wall_time = parsed.replace(tzinfo=None)
-    first = wall_time.replace(tzinfo=_ZURICH, fold=0)
-    second = wall_time.replace(tzinfo=_ZURICH, fold=1)
-    if first.utcoffset() != second.utcoffset():
-        raise ModelError(f"{field} is ambiguous in Europe/Zurich")
     return parsed
 
 
@@ -188,18 +187,28 @@ def _dom_text(mapping: Mapping[str, object], field: str) -> str:
     return value.strip()
 
 
-def _local_timestamp(local_date: date, local_time: time, field: str) -> str:
+def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
     wall_time = datetime.combine(local_date, local_time)
     first = wall_time.replace(tzinfo=_ZURICH, fold=0)
     second = wall_time.replace(tzinfo=_ZURICH, fold=1)
     if first.utcoffset() != second.utcoffset():
         raise PlaytomicBrowserError(f"{field} is ambiguous in Europe/Zurich")
-    return first.isoformat(timespec="seconds")
+    return first
+
+
+_SLOT_DATE = re.compile(r"(?<![0-9])([0-9]{4}-[0-9]{2}-[0-9]{2})T")
+
+
+def _slot_matches_date(external_id: str, requested_date: date) -> bool:
+    match = _SLOT_DATE.search(external_id)
+    return match is not None and match.group(1) == requested_date.isoformat()
 
 
 def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation | None:
     slot = _dom_mapping(item, "visible slot")
     external_id = _dom_text(slot, "external_id")
+    if not _slot_matches_date(external_id, requested_date):
+        return None
     local_time_text = _dom_text(slot, "time")
     duration_text = _dom_text(slot, "duration")
     classes = slot.get("class")
@@ -233,10 +242,12 @@ def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObserv
     if duration <= 0:
         raise PlaytomicBrowserError("visible slot has an invalid duration")
 
-    start_wall = datetime.combine(requested_date, parsed_time)
-    end_wall = start_wall + timedelta(minutes=duration)
-    starts_at = _local_timestamp(start_wall.date(), start_wall.time(), "starts_at")
-    ends_at = _local_timestamp(end_wall.date(), end_wall.time(), "ends_at")
+    start_local = _local_datetime(requested_date, parsed_time, "starts_at")
+    end_local = (
+        start_local.astimezone(UTC) + timedelta(minutes=duration)
+    ).astimezone(_ZURICH)
+    starts_at = start_local.isoformat(timespec="seconds")
+    ends_at = end_local.isoformat(timespec="seconds")
     try:
         return BrowserSlotObservation(
             external_id,
@@ -262,7 +273,16 @@ def parse_visible_dom(payload: object, requested_date: date) -> tuple[BrowserSlo
         raise PlaytomicBrowserUnavailable("public page is explicitly unavailable")
     if dom.get("view") != "booking":
         raise PlaytomicBrowserError("visible booking view was not found")
-    if _dom_text(dom, "date") != requested_date.isoformat():
+    dates_value = dom.get("dates")
+    if not isinstance(dates_value, list):
+        raise PlaytomicBrowserError("visible DOM is missing date controls")
+    raw_dates = cast(list[object], dates_value)
+    if not all(isinstance(value, str) for value in raw_dates):
+        raise PlaytomicBrowserError("visible DOM is missing date controls")
+    dates = cast(list[str], raw_dates)
+    if len(set(dates)) > 1:
+        raise PlaytomicBrowserError("visible date controls have divergent values")
+    if len(dates) != 1 or dates[0] != requested_date.isoformat():
         raise PlaytomicBrowserError("visible date control did not select the requested date")
     raw_slots_value = dom.get("slots")
     if not isinstance(raw_slots_value, list):
@@ -285,6 +305,11 @@ def extract_browser_observations(
 ) -> tuple[BrowserSlotObservation, ...]:
     payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
     return parse_visible_dom(payload, requested_date)
+
+
+def _select_date(page: _BrowserPage, requested_date: date) -> None:
+    if page.evaluate(_SELECT_DATE_SCRIPT, requested_date.isoformat()) is not True:
+        raise PlaytomicBrowserError("visible date controls have divergent values")
 
 
 def parse_browser_observations(
@@ -393,11 +418,22 @@ def _payload_is_ready(payload: object, requested_date: date) -> bool:
     if dom.get("view") != "booking" or dom.get("date") != requested_date.isoformat():
         return False
     slots = dom.get("slots")
-    if isinstance(slots, list) and slots:
+    if isinstance(slots, list) and _has_requested_date_slot(cast(list[object], slots), requested_date):
         return True
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
         return any(marker in normalized_text for marker in _NO_SLOT_MARKERS)
+    return False
+
+
+def _has_requested_date_slot(slots: list[object], requested_date: date) -> bool:
+    for item in slots:
+        if not isinstance(item, Mapping):
+            continue
+        mapping = cast(Mapping[str, object], item)
+        external_id = mapping.get("external_id")
+        if isinstance(external_id, str) and _slot_matches_date(external_id, requested_date):
+            return True
     return False
 
 
@@ -480,7 +516,7 @@ class PlaytomicBrowserConnector:
                         page.goto(source_url, wait_until="commit", timeout=self._timeout_ms)
                         current_date = window_start
                         while current_date < window_end:
-                            page.evaluate(_SELECT_DATE_SCRIPT, current_date.isoformat())
+                            _select_date(page, current_date)
                             payload = _wait_for_visible_dom(page, current_date, self._timeout_ms)
                             try:
                                 observations.extend(parse_visible_dom(payload, current_date))
