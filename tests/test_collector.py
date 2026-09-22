@@ -54,6 +54,7 @@ def five_playtomic_sources() -> tuple[PlaytomicSource, ...]:
     return tuple(
         replace(
             source,
+            transport="json",
             availability_url_template=(
                 f"https://fixtures.example/{source.location_id}"
                 "?from={window_start}&to={window_end}"
