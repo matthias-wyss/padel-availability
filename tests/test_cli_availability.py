@@ -340,6 +340,59 @@ def test_collect_playtomic_reports_missing_chromium_with_setup_guidance(
     assert "uv run playwright install chromium" in error
 
 
+def test_collect_playtomic_reports_chromium_launch_failure_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    executable = tmp_path / "chromium"
+    executable.touch()
+    calls: list[None] = []
+    launch_calls: list[dict[str, object]] = []
+    stop_calls: list[None] = []
+
+    def fake_launch(**kwargs: object) -> object:
+        launch_calls.append(kwargs)
+        raise RuntimeError("missing shared library")
+
+    driver = types.SimpleNamespace(
+        chromium=types.SimpleNamespace(
+            executable_path=str(executable),
+            launch=fake_launch,
+        ),
+        stop=lambda: stop_calls.append(None),
+    )
+    sync_api = types.ModuleType("playwright.sync_api")
+    sync_api.sync_playwright = lambda: types.SimpleNamespace(start=lambda: driver)  # type: ignore[attr-defined]
+
+    def fake_collect(*_args: object, **_kwargs: object) -> tuple[CollectionOutcome, ...]:
+        calls.append(None)
+        return ()
+
+    monkeypatch.setattr(cli, "collect_playtomic", fake_collect)
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+
+    assert cli.main(
+        [
+            "collect-playtomic",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/playtomic_sources.json"),
+        ]
+    ) == 2
+
+    assert calls == []
+    assert launch_calls == [{"headless": True, "args": ["--disable-gpu", "--disable-dev-shm-usage"]}]
+    assert stop_calls == [None]
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error
+
+
 def test_collect_playtomic_does_not_require_playwright_for_unavailable_source(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .collector import collect_playtomic
 from .connectors.playtomic import load_playtomic_sources
+from .connectors.playtomic_browser import _CHROMIUM_ARGS  # pyright: ignore[reportPrivateUsage]
 from .database import (
     connect,
     get_availability_snapshot,
@@ -34,6 +35,12 @@ def _check_playwright_runtime() -> None:
     try:
         if not Path(playwright.chromium.executable_path).is_file():
             raise _PlaywrightSetupError("Chromium executable is not installed")
+        browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_ARGS))
+        browser.close()
+    except _PlaywrightSetupError:
+        raise
+    except Exception as error:
+        raise _PlaywrightSetupError("Playwright browser runtime is unavailable") from error
     finally:
         playwright.stop()
 
