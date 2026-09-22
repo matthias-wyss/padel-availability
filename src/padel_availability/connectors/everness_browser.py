@@ -488,7 +488,6 @@ def _wait_for_everness_date(
         loading = _everness_payload_loading(payload)
         if loading:
             refresh_observed = True
-            stable_fingerprint = None
         fingerprint = _everness_payload_fingerprint(payload)
         label = _everness_visible_locator(page, "#multi-language-date").inner_text()
         label_date = _parse_date_label(label)
@@ -502,6 +501,8 @@ def _wait_for_everness_date(
                 return payload
             else:
                 stable_fingerprint = fingerprint
+        else:
+            stable_fingerprint = None
         page.wait_for_timeout(100)
     raise EvernessBrowserError("timed out waiting for requested date and refreshed Everness grid")
 

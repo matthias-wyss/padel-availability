@@ -758,6 +758,37 @@ def test_everness_connector_waits_for_final_stable_grid_after_transient_valid_gr
     assert [slot.status for slot in result.slots] == ["unavailable", "available"]
 
 
+def test_everness_connector_resets_stability_after_non_requested_payload() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    other = date(2026, 9, 24)
+    dates = {
+        first: [_everness_payload(first, fingerprint="old", rows=[])],
+        second: [
+            _everness_payload(second, fingerprint="grid-1", rows=[]),
+            _everness_payload(other, fingerprint="grid-1", rows=[]),
+            _everness_payload(second, fingerprint="grid-1", rows=[]),
+        ],
+    }
+    connector, page, context = _everness_connector(
+        dates, events, initial_date=first, timeout_ms=300
+    )
+
+    with pytest.raises(EvernessBrowserError, match="requested date"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=first,
+            window_end=date(2026, 9, 24),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.wait_ticks == 3
+    assert page.closed and context.closed
+
+
 def test_everness_connector_maps_startup_browser_error() -> None:
     source = EvernessSource(
         "everness",
