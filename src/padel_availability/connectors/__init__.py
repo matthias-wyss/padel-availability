@@ -1,5 +1,12 @@
 """Availability connectors."""
 
+from .airpad import (
+    AIRPAD_LOCATION_IDS,
+    AIRPAD_LOCATION_LABELS,
+    AirpadSource,
+    AirpadSourceError,
+    load_airpad_sources,
+)
 from .playtomic import (
     JsonFetcher,
     PlaytomicConnector,
@@ -21,6 +28,10 @@ from .playtomic_browser import (
 )
 
 __all__ = [
+    "AIRPAD_LOCATION_IDS",
+    "AIRPAD_LOCATION_LABELS",
+    "AirpadSource",
+    "AirpadSourceError",
     "BrowserConnector",
     "BrowserConnectorFactory",
     "BrowserSlotObservation",
@@ -32,6 +43,7 @@ __all__ = [
     "PlaytomicSourceError",
     "extract_browser_observations",
     "fetch_public_json",
+    "load_airpad_sources",
     "load_playtomic_sources",
     "parse_browser_observations",
     "parse_playtomic_slots",

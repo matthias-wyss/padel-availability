@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "sources": [
+    {
+      "location_id": "airpad-les-acacias",
+      "booking_url": "https://www.airpad.ch/reserve",
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "airpad-la-praille",
+      "booking_url": "https://www.airpad.ch/reserve",
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "airpad-meyrin",
+      "booking_url": "https://www.airpad.ch/reserve",
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "airpad-plan-les-ouates",
+      "booking_url": "https://www.airpad.ch/reserve",
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "public"
+    }
+  ]
+}
