@@ -1,15 +1,19 @@
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
 
 from padel_availability import cli
-from padel_availability.availability import AvailabilityResult, AvailabilityRun
+from padel_availability.availability import (
+    AvailabilityResult,
+    AvailabilityRun,
+    AvailabilitySlot,
+)
 from padel_availability.collector import CollectionOutcome
 from padel_availability.connectors.playtomic import PlaytomicSource
 from padel_availability.database import save_availability_result
 from padel_availability.models import LocationRecord
-
 
 ROOT = Path(__file__).parents[1]
 PLAYTOMIC_IDS = (
@@ -134,7 +138,18 @@ def test_collect_playtomic_prints_collector_outcomes_deterministically(
             "success",
             None,
         )
-        save_availability_result(connection, AvailabilityResult(prior_success, ()))
+        prior_slot = AvailabilitySlot(
+            "prior-etoy",
+            "padel-parc-etoy",
+            "prior-slot",
+            "prior-slot",
+            "Court 1",
+            "2030-01-03T08:00:00Z",
+            "2030-01-03T09:00:00Z",
+            "Europe/Zurich",
+            "available",
+        )
+        save_availability_result(connection, AvailabilityResult(prior_success, (prior_slot,)))
         for outcome in outcomes:
             run = AvailabilityRun(
                 outcome.run_id,
@@ -170,17 +185,17 @@ def test_collect_playtomic_prints_collector_outcomes_deterministically(
     assert source_ids == frozenset(PLAYTOMIC_IDS)
     assert (horizon_days, location_id) == (14, None)
     assert capsys.readouterr().out.splitlines() == [
-        "gva-palexpo status=success slots=3 window=2030-01-02..2030-01-16 "
-        "error=none last_success=2030-01-02T00:00:00Z",
-        "padel-parc-etoy status=error slots=0 window=2030-01-02..2030-01-16 "
-        "error=temporary source failure last_success=2029-12-01T00:00:00Z",
-        "padel-parc-preverenges status=unavailable slots=0 "
-        "window=2030-01-02..2030-01-16 error=no public availability feed was verified "
-        "last_success=none",
-        "padel-station status=success slots=2 window=2030-01-02..2030-01-16 "
-        "error=none last_success=2030-01-02T00:00:00Z",
-        "vaudoise-arena status=success slots=1 window=2030-01-02..2030-01-16 "
-        "error=none last_success=2030-01-02T00:00:00Z",
+        ("gva-palexpo status=success slots=3 window=2030-01-02..2030-01-16 "
+         "error=none last_success=2030-01-02T00:00:00Z"),
+        ("padel-parc-etoy status=stale slots=1 window=2030-01-02..2030-01-16 "
+         "error=temporary source failure last_success=2029-12-01T00:00:00Z"),
+        ("padel-parc-preverenges status=unavailable slots=0 "
+         "window=2030-01-02..2030-01-16 error=no public availability feed was verified "
+         "last_success=none"),
+        ("padel-station status=success slots=2 window=2030-01-02..2030-01-16 "
+         "error=none last_success=2030-01-02T00:00:00Z"),
+        ("vaudoise-arena status=success slots=1 window=2030-01-02..2030-01-16 "
+         "error=none last_success=2030-01-02T00:00:00Z"),
     ]
 
 
@@ -232,8 +247,8 @@ def test_collect_playtomic_can_select_one_location(
 
     assert calls == ["padel-station"]
     assert capsys.readouterr().out.splitlines() == [
-        "padel-station status=unavailable slots=0 window=2030-02-01..2030-02-15 "
-        "error=feed unavailable last_success=none"
+        ("padel-station status=unavailable slots=0 window=2030-02-01..2030-02-15 "
+         "error=feed unavailable last_success=none")
     ]
 
 
@@ -250,3 +265,35 @@ def test_collect_playtomic_returns_two_when_catalog_is_missing_locations(tmp_pat
             str(ROOT / "data/playtomic_sources.json"),
         ]
     ) == 2
+
+
+def test_collect_playtomic_reports_missing_playwright_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    calls: list[None] = []
+
+    def missing_playwright(*_args: object, **_kwargs: object) -> tuple[CollectionOutcome, ...]:
+        calls.append(None)
+        return ()
+
+    monkeypatch.setattr(cli, "collect_playtomic", missing_playwright)
+    monkeypatch.setitem(sys.modules, "playwright", None)
+
+    assert cli.main(
+        [
+            "collect-playtomic",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/playtomic_sources.json"),
+        ]
+    ) == 2
+
+    assert calls == []
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error

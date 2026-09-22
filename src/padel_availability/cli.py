@@ -2,8 +2,8 @@ import argparse
 import json
 import sqlite3
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .collector import collect_playtomic
 from .connectors.playtomic import load_playtomic_sources
@@ -120,19 +120,32 @@ def _run_command(arguments: argparse.Namespace) -> None:
             arguments.output.write_text(report, encoding="utf-8")
             return
         if arguments.command == "collect-playtomic":
+            sources = load_playtomic_sources(arguments.sources)
+            if any(
+                source.transport == "browser_dom"
+                and (arguments.location_id is None or source.location_id == arguments.location_id)
+                for source in sources
+            ):
+                __import__("playwright")
             outcomes = collect_playtomic(
                 connection,
                 list_locations(connection),
-                load_playtomic_sources(arguments.sources),
+                sources,
                 horizon_days=arguments.days,
                 location_id=arguments.location_id,
             )
             for outcome in outcomes:
                 error = " ".join((outcome.error or "none").split())[:160]
                 snapshot = get_availability_snapshot(connection, outcome.location_id)
+                status = snapshot.status if snapshot is not None else outcome.status
+                slot_count = (
+                    len(snapshot.slots)
+                    if snapshot is not None and snapshot.status == "stale"
+                    else outcome.slot_count
+                )
                 last_success = snapshot.last_success_at if snapshot is not None else None
                 print(
-                    f"{outcome.location_id} status={outcome.status} slots={outcome.slot_count} "
+                    f"{outcome.location_id} status={status} slots={slot_count} "
                     f"window={outcome.window_start}..{outcome.window_end} error={error} "
                     f"last_success={last_success or 'none'}"
                 )
@@ -150,6 +163,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(error.code)
     try:
         _run_command(arguments)
+    except ModuleNotFoundError as error:
+        if error.name != "playwright":
+            raise
+        print(
+            "error: Playwright is required for browser collection; run "
+            "`uv sync --group browser` and `uv run playwright install chromium`",
+            file=sys.stderr,
+        )
+        return 2
     except (OSError, ValueError, sqlite3.Error) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

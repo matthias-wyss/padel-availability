@@ -57,6 +57,13 @@ Use a `.json` output path for a machine-readable report.
 
 ## Manual Availability Collection
 
+Install the optional browser tools and Chromium once:
+
+```bash
+uv sync --group browser
+uv run playwright install chromium
+```
+
 Collect the public Playtomic availability snapshot manually:
 
 ```bash
@@ -66,14 +73,15 @@ uv run padel-availability collect-playtomic \
   --days 14
 ```
 
-This command is read-only against Playtomic and uses public sources only. It
-is manual and sequential: it does not book courts, use credentials, or run in
-the background. Each outcome is persisted locally. An `error` or
-`unavailable` outcome keeps the previous successful snapshot as stale rather
-than replacing its slots.
+This command is public and read-only against Playtomic. Collection is manual
+and sequential: it does not book courts, use credentials, or run in the
+background. Browser state is ephemeral and is not saved between runs. CAPTCHA
+or login pages become explicit `error` outcomes; they are not bypassed. Each
+outcome is persisted locally. An `error` or `unavailable` outcome keeps the
+previous successful snapshot as stale rather than replacing its slots.
 
-`reports/inventory.md` remains the static inventory report; it is not yet an
-availability report.
+`reports/inventory.md` remains the separate static inventory report; it is not
+an availability report.
 
 ## Data Boundaries
 
