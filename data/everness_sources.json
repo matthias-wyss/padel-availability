@@ -1,0 +1,11 @@
+{
+  "format_version": 1,
+  "sources": [
+    {
+      "location_id": "everness",
+      "booking_url": "https://padel.everness.ch/",
+      "checked_at": "2026-09-22T00:00:00Z",
+      "status": "public"
+    }
+  ]
+}
