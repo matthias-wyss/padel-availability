@@ -294,6 +294,17 @@ def test_airpad_incomplete_empty_grid_is_a_bounded_error(fixture_browser: Any) -
         parse_airpad_dom(payload, date(2026, 9, 22))
 
 
+def test_airpad_labeled_empty_grid_without_empty_marker_is_zero_slots(
+    fixture_browser: Any,
+) -> None:
+    payload = _browser_payload(fixture_browser, "booking-empty-labeled")
+
+    assert payload["empty_grid"] is True
+    assert payload["empty_rows"] == []
+    assert payload["invalid_rows"] is False
+    assert parse_airpad_dom(payload, date(2026, 9, 22)) == ()
+
+
 def test_airpad_empty_playground_is_zero_slots() -> None:
     assert parse_airpad_dom(_fixture_payload("booking-empty"), date(2026, 9, 22)) == ()
 

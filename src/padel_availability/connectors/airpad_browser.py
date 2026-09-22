@@ -181,13 +181,11 @@ def _parse_airpad_slot(item: object, requested_date: date) -> BrowserSlotObserva
         raise AirpadBrowserError("visible slot failed validation") from error
 
 
-def _has_valid_court_rows(value: object, *, require_one: bool = False) -> bool:
+def _has_valid_court_rows(value: object) -> bool:
     if not isinstance(value, list):
         return False
     rows = cast(list[object], value)
-    return (not require_one or bool(rows)) and all(
-        isinstance(row, str) and row.strip() for row in rows
-    )
+    return all(isinstance(row, str) and row.strip() for row in rows)
 
 
 def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlotObservation, ...]:
@@ -215,8 +213,6 @@ def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlot
         raise AirpadBrowserError("visible booking row is missing court label")
     empty_rows = dom.get("empty_rows")
     if dom.get("empty_grid") is True:
-        if not _has_valid_court_rows(empty_rows, require_one=True):
-            raise AirpadBrowserError("visible empty grid is missing court label")
         return ()
     if empty_rows:
         if not _has_valid_court_rows(empty_rows):
