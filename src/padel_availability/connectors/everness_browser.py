@@ -75,7 +75,9 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
   }
   const visibleText = body.innerText || '';
   const normalizedText = visibleText.replace(/\s+/g, ' ').trim().toLowerCase();
-  const loading = normalizedText.includes('loading') || normalizedText.includes('chargement') ||
+  const bodyLoading = visible(body) &&
+    (body.classList.contains('loading') || body.getAttribute('aria-busy') === 'true');
+  const loading = bodyLoading || normalizedText.includes('loading') || normalizedText.includes('chargement') ||
     normalizedText.includes('please wait') || normalizedText.includes('updating') ||
     Array.from(body.querySelectorAll('.loading, [aria-busy="true"]')).some(visible);
   const fingerprintInput = JSON.stringify({

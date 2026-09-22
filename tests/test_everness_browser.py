@@ -213,6 +213,7 @@ def test_everness_missing_ids_use_shared_hash() -> None:
 
 def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_browser: Any) -> None:
     payload = _browser_payload(fixture_browser, "booking-available")
+    repeated_payload = _browser_payload(fixture_browser, "booking-available")
 
     assert set(payload) == {
         "view",
@@ -226,9 +227,34 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
     assert payload["view"] == "booking"
     assert payload["date_label"] == "22 Sep 2026"
     assert payload["courts"] == ["Court 1", "Court 2"]
+    assert payload["loading"] is False
+    fingerprint = payload["grid_fingerprint"]
+    assert isinstance(fingerprint, str) and fingerprint.startswith("fnv1a-")
+    assert fingerprint == repeated_payload["grid_fingerprint"]
     rows = cast(list[dict[str, object]], payload["rows"])
     assert len(rows) == 3
+    assert [row["time"] for row in rows] == ["09:00", "10:30", "12:00"]
+    assert [
+        [cast(dict[str, object], cell)["class"] for cell in cast(list[object], row["cells"])]
+        for row in rows
+    ] == [
+        ["terrainTxt cursor", "terrainTxt notallowed"],
+        ["terrainTxt cursor", "terrainTxt pending"],
+        ["terrainTxt notallowed", "terrainTxt cursor"],
+    ]
     assert all("external_id" not in cell for row in rows for cell in cast(list[dict[str, object]], row["cells"]))
+
+    observations = parse_everness_dom(payload, REQUESTED_DATE)
+    assert [observation.status for observation in observations] == [
+        "available",
+        "unavailable",
+        "available",
+        "unknown",
+        "unavailable",
+        "available",
+    ]
+    assert observations[0].ends_at == "2026-09-22T10:30:00+02:00"
+    assert observations[-1].ends_at == "2026-09-22T13:30:00+02:00"
 
 
 def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) -> None:
@@ -238,3 +264,13 @@ def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) ->
     rows = cast(list[dict[str, object]], payload["rows"])
     assert [row["time"] for row in rows] == ["09:00", "10:30"]
     assert all(len(cast(list[object], row["cells"])) == 1 for row in rows)
+    observations = parse_everness_dom(payload, REQUESTED_DATE)
+    assert [observation.status for observation in observations] == ["available", "unavailable"]
+
+
+def test_everness_body_loading_markers_are_not_final_data(fixture_browser: Any) -> None:
+    payload = _browser_payload(fixture_browser, "booking-loading")
+
+    assert payload["loading"] is True
+    with pytest.raises(ValueError, match="loading"):
+        parse_everness_dom(payload, REQUESTED_DATE)
