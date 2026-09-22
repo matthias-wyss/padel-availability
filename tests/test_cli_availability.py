@@ -301,6 +301,31 @@ def test_collect_playtomic_reports_missing_playwright_with_setup_guidance(
     assert "uv run playwright install chromium" in error
 
 
+def test_collect_playtomic_reports_partial_playwright_with_setup_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "catalog.sqlite3"
+    ready_catalog(database)
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.delitem(sys.modules, "playwright.sync_api", raising=False)
+
+    assert cli.main(
+        [
+            "collect-playtomic",
+            "--database",
+            str(database),
+            "--sources",
+            str(ROOT / "data/playtomic_sources.json"),
+        ]
+    ) == 2
+
+    error = capsys.readouterr().err
+    assert "uv sync --group browser" in error
+    assert "uv run playwright install chromium" in error
+
+
 def test_collect_playtomic_reports_missing_chromium_with_setup_guidance(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

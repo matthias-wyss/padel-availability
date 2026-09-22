@@ -62,12 +62,18 @@ class PlaytomicSource:
                 or self.availability_url_template.count("{window_end}") != 1
             ):
                 raise ModelError("availability_url_template must contain date placeholders")
-        if self.transport == "json" and self.status == "public":
-            if self.availability_url_template is None:
-                raise ModelError("public JSON sources require availability_url_template")
-        if self.transport == "browser_dom" and self.status == "public":
-            if self.availability_url_template is not None:
-                raise ModelError("public browser sources must not have availability_url_template")
+        if (
+            self.transport == "json"
+            and self.status == "public"
+            and self.availability_url_template is None
+        ):
+            raise ModelError("public JSON sources require availability_url_template")
+        if (
+            self.transport == "browser_dom"
+            and self.status == "public"
+            and self.availability_url_template is not None
+        ):
+            raise ModelError("public browser sources must not have availability_url_template")
         if self.status == "unavailable" and self.availability_url_template is not None:
             raise ModelError("unavailable sources must not have availability_url_template")
 

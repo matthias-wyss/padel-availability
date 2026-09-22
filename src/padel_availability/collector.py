@@ -113,57 +113,70 @@ def collect_playtomic(
     json_connector = PlaytomicConnector(sources, fetch_json=fetch_json)
     selected_ids = {location.location_id for location in selected}
     browser_connector: BrowserConnector | None = None
+    browser_session_needed = False
     if any(
         source.location_id in selected_ids and source.transport == "browser_dom"
         for source in sources
     ):
+        browser_session_needed = any(
+            source.location_id in selected_ids
+            and source.transport == "browser_dom"
+            and source.status == "public"
+            for source in sources
+        )
         browser_connector = (
             browser_connector_factory(sources)
             if browser_connector_factory is not None
             else PlaytomicBrowserConnector(sources)
         )
     outcomes: list[CollectionOutcome] = []
-    for location in selected:
-        source = sources_by_id.get(location.location_id)
-        source_url = source.booking_url if source is not None else location.booking_url
-        if source_url is None:
-            source_url = f"https://playtomic.com/locations/{location.location_id}"
-        run_id = f"playtomic-{location.location_id}-{collected_at}"
-        if source is not None and source.transport == "browser_dom":
-            assert browser_connector is not None
-            connector = browser_connector
-        else:
-            connector = json_connector
-        try:
-            result = connector.collect(
-                location,
-                run_id=run_id,
-                window_start=window_start,
-                window_end=window_end,
-                collected_at=collected_at,
-            )
-        except (PlaytomicSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
-            result = _error_result(
-                location,
-                source_url=source_url,
-                run_id=run_id,
-                window_start=window_start.isoformat(),
-                window_end=window_end.isoformat(),
-                horizon_days=horizon_days,
-                collected_at=collected_at,
-                error=error,
-            )
+    try:
+        if browser_connector is not None and browser_session_needed:
+            browser_connector.open()
+        for location in selected:
+            source = sources_by_id.get(location.location_id)
+            source_url = source.booking_url if source is not None else location.booking_url
+            if source_url is None:
+                source_url = f"https://playtomic.com/locations/{location.location_id}"
+            run_id = f"playtomic-{location.location_id}-{collected_at}"
+            if source is not None and source.transport == "browser_dom":
+                assert browser_connector is not None
+                connector = browser_connector
+            else:
+                connector = json_connector
+            try:
+                result = connector.collect(
+                    location,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+            except (PlaytomicSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
+                result = _error_result(
+                    location,
+                    source_url=source_url,
+                    run_id=run_id,
+                    window_start=window_start.isoformat(),
+                    window_end=window_end.isoformat(),
+                    horizon_days=horizon_days,
+                    collected_at=collected_at,
+                    error=error,
+                )
 
-        save_availability_result(connection, result)
-        outcomes.append(
-            CollectionOutcome(
-                location.location_id,
-                result.run.run_id,
-                result.run.status,
-                len(result.slots),
-                result.run.window_start,
-                result.run.window_end,
-                result.run.error,
+            save_availability_result(connection, result)
+            outcomes.append(
+                CollectionOutcome(
+                    location.location_id,
+                    result.run.run_id,
+                    result.run.status,
+                    len(result.slots),
+                    result.run.window_start,
+                    result.run.window_end,
+                    result.run.error,
+                )
             )
-        )
+    finally:
+        if browser_connector is not None:
+            browser_connector.close()
     return tuple(sorted(outcomes, key=lambda outcome: outcome.location_id))

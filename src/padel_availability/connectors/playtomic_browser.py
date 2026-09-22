@@ -39,7 +39,7 @@ _VISIBLE_DOM_SCRIPT = """
   const dates = dateControls.map(element => element.value);
   const date = dates.length > 0 && dates.every(value => value === dates[0]) ? dates[0] : '';
   const slots = Array.from(body.querySelectorAll(
-    '[data-slot-id][data-tracking-property-time][data-tracking-property-duration]'
+    '[data-tracking-property-time][data-tracking-property-duration]'
   )).filter(visible).map(element => {
     const row = element.closest('div.flex.border-b');
     return {
@@ -197,23 +197,22 @@ def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
     return first
 
 
-def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation | None:
+def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation:
     slot = _dom_mapping(item, "visible slot")
-    external_id = _dom_text(slot, "external_id")
+    external_id = slot.get("external_id")
     local_time_text = _dom_text(slot, "time")
     duration_text = _dom_text(slot, "duration")
     classes = slot.get("class")
     disabled = slot.get("disabled")
     court_label = slot.get("court")
+    if external_id is not None and (not isinstance(external_id, str) or not external_id.strip()):
+        raise PlaytomicBrowserError("visible slot has an invalid external ID")
     if not isinstance(classes, str):
         raise PlaytomicBrowserError("visible slot is missing class state")
     if not isinstance(disabled, bool):
         raise PlaytomicBrowserError("visible slot has an invalid disabled state")
     if court_label is not None and (not isinstance(court_label, str) or not court_label.strip()):
         raise PlaytomicBrowserError("visible slot has an invalid court label")
-    if disabled or "bg-white" not in classes:
-        return None
-
     match = re.fullmatch(r"([0-9]{1,2})(?::([0-9]{2}))?\s*([AP]M)", local_time_text.upper())
     if match is None:
         raise PlaytomicBrowserError("visible slot has an ambiguous time")
@@ -239,11 +238,11 @@ def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObserv
     ends_at = end_local.isoformat(timespec="seconds")
     try:
         return BrowserSlotObservation(
-            external_id,
+            cast(str | None, external_id),
             court_label,
             starts_at,
             ends_at,
-            "available",
+            "unavailable" if disabled else "available" if "bg-white" in classes else "unknown",
         )
     except ModelError as error:
         raise PlaytomicBrowserError("visible slot failed validation") from error
@@ -277,11 +276,7 @@ def parse_visible_dom(payload: object, requested_date: date) -> tuple[BrowserSlo
     if not isinstance(raw_slots_value, list):
         raise PlaytomicBrowserError("visible DOM is missing slot cards")
     raw_slots = cast(list[object], raw_slots_value)
-    observations = tuple(
-        observation
-        for item in raw_slots
-        if (observation := _parse_visible_slot(item, requested_date)) is not None
-    )
+    observations = tuple(_parse_visible_slot(item, requested_date) for item in raw_slots)
     if observations:
         return observations
     if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
@@ -343,40 +338,39 @@ def parse_browser_observations(
         except ModelError as error:
             raise PlaytomicSourceError(f"observation {index} failed validation") from error
         existing = slots.get(slot.slot_key)
-        if existing is not None:
-            if existing != slot:
-                if (
-                    observation.external_id is None
-                    or existing.starts_at == slot.starts_at
-                    and existing.ends_at == slot.ends_at
-                ):
-                    kind = "external_id" if observation.external_id is not None else "slot hash"
-                    raise PlaytomicSourceError(f"conflicting duplicate {kind}")
-                try:
-                    slot = AvailabilitySlot(
-                        run_id,
+        if existing is not None and existing != slot:
+            if (
+                observation.external_id is None
+                or existing.starts_at == slot.starts_at
+                and existing.ends_at == slot.ends_at
+            ):
+                kind = "external_id" if observation.external_id is not None else "slot hash"
+                raise PlaytomicSourceError(f"conflicting duplicate {kind}")
+            try:
+                slot = AvailabilitySlot(
+                    run_id,
+                    location_id,
+                    _slot_key(
                         location_id,
-                        _slot_key(
-                            location_id,
-                            observation.court_label,
-                            starts_at,
-                            ends_at,
-                            None,
-                        ),
-                        observation.external_id,
                         observation.court_label,
                         starts_at,
                         ends_at,
-                        "Europe/Zurich",
-                        observation.status,
-                    )
-                except ModelError as error:
-                    raise PlaytomicSourceError(f"observation {index} failed validation") from error
-                existing = slots.get(slot.slot_key)
-                if existing is not None and existing != slot:
-                    raise PlaytomicSourceError("conflicting duplicate slot hash")
-            else:
-                continue
+                        None,
+                    ),
+                    observation.external_id,
+                    observation.court_label,
+                    starts_at,
+                    ends_at,
+                    "Europe/Zurich",
+                    observation.status,
+                )
+            except ModelError as error:
+                raise PlaytomicSourceError(f"observation {index} failed validation") from error
+            existing = slots.get(slot.slot_key)
+            if existing is not None and existing != slot:
+                raise PlaytomicSourceError("conflicting duplicate slot hash")
+        elif existing is not None:
+            continue
         slots[slot.slot_key] = slot
 
     return tuple(
@@ -424,8 +418,22 @@ def _default_browser_factory() -> _BrowserSession:
     return _PlaywrightBrowserSession()
 
 
+def _is_documented_browser_error(error: Exception) -> bool:
+    if isinstance(error, (OSError, TimeoutError)):
+        return True
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError:
+        return False
+    return isinstance(error, PlaywrightError)
+
+
 def _payload_is_ready(
-    payload: object, requested_date: date, previous_payload: object | None = None
+    payload: object,
+    requested_date: date,
+    previous_payload: object | None = None,
+    *,
+    refresh_observed: bool = False,
 ) -> bool:
     if not isinstance(payload, Mapping):
         return False
@@ -443,11 +451,11 @@ def _payload_is_ready(
     date_changed = _payload_date(previous_payload) != requested_date.isoformat()
     slots = dom.get("slots")
     if isinstance(slots, list) and _has_visible_slot(cast(list[object], slots)):
-        return not date_changed or payload_changed
+        return not date_changed or payload_changed or refresh_observed
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
         if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
-            return not date_changed or payload_changed
+            return not date_changed or payload_changed or refresh_observed
     return False
 
 
@@ -481,8 +489,7 @@ def _has_visible_slot(slots: list[object]) -> bool:
         if not isinstance(item, Mapping):
             continue
         mapping = cast(Mapping[str, object], item)
-        external_id = mapping.get("external_id")
-        if isinstance(external_id, str) and external_id.strip():
+        if isinstance(mapping.get("time"), str) and isinstance(mapping.get("duration"), str):
             return True
     return False
 
@@ -492,15 +499,32 @@ def _wait_for_visible_dom(
     requested_date: date,
     timeout_ms: int,
     previous_payload: object | None = None,
-) -> object:
+) -> tuple[object, bool]:
     attempts = max(1, timeout_ms // 100)
     payload: object = None
+    refresh_observed = False
     for _ in range(attempts):
         payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
-        if _payload_is_ready(payload, requested_date, previous_payload):
-            return payload
+        refresh_observed = refresh_observed or _payload_has_marker(payload, _LOADING_MARKERS)
+        if _payload_is_ready(
+            payload,
+            requested_date,
+            previous_payload,
+            refresh_observed=refresh_observed,
+        ):
+            return payload, refresh_observed
         page.wait_for_timeout(100)
     raise PlaytomicBrowserError("timed out waiting for the visible booking view")
+
+
+def _payload_has_marker(payload: object, markers: tuple[str, ...]) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    visible_text = payload.get("visible_text")
+    if not isinstance(visible_text, str):
+        return False
+    normalized_text = " ".join(visible_text.split()).casefold()
+    return any(marker in normalized_text for marker in markers)
 
 
 def _unavailable_result(
@@ -527,6 +551,10 @@ def _unavailable_result(
 
 
 class BrowserConnector(Protocol):
+    def open(self) -> None: ...
+
+    def close(self) -> None: ...
+
     def collect(
         self,
         location: LocationRecord,
@@ -549,6 +577,18 @@ class PlaytomicBrowserConnector:
         self._sources = {source.location_id: source for source in sources}
         self._browser_factory = browser_factory
         self._timeout_ms = timeout_ms
+        self._browser: _BrowserSession | None = None
+
+    def open(self) -> None:
+        if self._browser is None:
+            session = self._browser_factory()
+            self._browser = session.__enter__()
+
+    def close(self) -> None:
+        browser = self._browser
+        self._browser = None
+        if browser is not None:
+            browser.__exit__(None, None, None)
 
     def collect(
         self,
@@ -575,44 +615,49 @@ class PlaytomicBrowserConnector:
 
         observations: list[BrowserSlotObservation] = []
         try:
-            with self._browser_factory() as browser:
-                context = browser.new_context()
+            self.open()
+            browser = self._browser
+            if browser is None:
+                raise PlaytomicBrowserError("browser session is not running")
+            context = browser.new_context()
+            try:
+                page = context.new_page()
                 try:
-                    page = context.new_page()
-                    try:
-                        page.goto(source_url, wait_until="commit", timeout=self._timeout_ms)
-                        current_date = window_start
-                        while current_date < window_end:
-                            previous_payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
-                            _select_date(page, current_date)
-                            payload = _wait_for_visible_dom(
-                                page,
-                                current_date,
-                                self._timeout_ms,
-                                previous_payload,
+                    page.goto(source_url, wait_until="commit", timeout=self._timeout_ms)
+                    current_date = window_start
+                    while current_date < window_end:
+                        previous_payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
+                        _select_date(page, current_date)
+                        payload, _refresh_observed = _wait_for_visible_dom(
+                            page,
+                            current_date,
+                            self._timeout_ms,
+                            previous_payload,
+                        )
+                        try:
+                            observations.extend(parse_visible_dom(payload, current_date))
+                        except PlaytomicBrowserUnavailable:
+                            return _unavailable_result(
+                                source_url,
+                                location_id,
+                                run_id,
+                                window_start,
+                                window_end,
+                                collected_at,
                             )
-                            try:
-                                observations.extend(parse_visible_dom(payload, current_date))
-                            except PlaytomicBrowserUnavailable:
-                                return _unavailable_result(
-                                    source_url,
-                                    location_id,
-                                    run_id,
-                                    window_start,
-                                    window_end,
-                                    collected_at,
-                                )
-                            current_date += timedelta(days=1)
-                    finally:
-                        page.close()
+                        current_date += timedelta(days=1)
                 finally:
-                    context.close()
+                    page.close()
+            finally:
+                context.close()
         except PlaytomicBrowserError:
             raise
         except PlaytomicSourceError:
             raise
         except Exception as error:
-            raise PlaytomicSourceError("browser navigation or extraction failed"[:160]) from error
+            if _is_documented_browser_error(error):
+                raise PlaytomicSourceError("browser navigation or extraction failed"[:160]) from error
+            raise
 
         slots = parse_browser_observations(
             tuple(observations),

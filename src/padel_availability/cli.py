@@ -25,8 +25,10 @@ class _PlaywrightSetupError(RuntimeError):
 
 
 def _check_playwright_runtime() -> None:
-    __import__("playwright")
-    from playwright.sync_api import sync_playwright
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as error:
+        raise _PlaywrightSetupError("Playwright browser runtime is unavailable") from error
 
     try:
         playwright = sync_playwright().start()

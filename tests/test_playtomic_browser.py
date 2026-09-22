@@ -195,11 +195,10 @@ def _matches_selector(element: _HtmlElement, selector: str) -> bool:
             and _has_class(element, "flex")
             and _has_class(element, "border-b")
         )
-    if selector == "[data-slot-id][data-tracking-property-time][data-tracking-property-duration]":
+    if selector == "[data-tracking-property-time][data-tracking-property-duration]":
         return element.tag != "#document" and all(
             element.has_attribute(attribute)
             for attribute in (
-                "data-slot-id",
                 "data-tracking-property-time",
                 "data-tracking-property-duration",
             )
@@ -252,7 +251,7 @@ class _SelectorPage:
         date_value = dates[0] if dates and all(value == dates[0] for value in dates) else ""
         slots: list[dict[str, Any]] = []
         for element in self.body.query_selector_all(
-            "[data-slot-id][data-tracking-property-time][data-tracking-property-duration]"
+            "[data-tracking-property-time][data-tracking-property-duration]"
         ):
             if not _is_visible(element):
                 continue
@@ -289,7 +288,7 @@ def _fixture_payload(name: str, browser: Any | None = None) -> dict[str, Any]:
     try:
         page.set_content(html)
         page.add_style_tag(
-            content="[data-slot-id] { display: block; width: 100px; height: 20px; }"
+            content="[data-tracking-property-time] { display: block; width: 100px; height: 20px; }"
         )
         payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
         assert isinstance(payload, dict)
@@ -322,6 +321,24 @@ class _FakePage:
 
     def close(self) -> None:
         self.closed = True
+
+
+class _SequencePage(_FakePage):
+    def __init__(self, payloads: list[dict[str, Any]]) -> None:
+        super().__init__(payloads[0])
+        self.payloads = payloads[1:]
+
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        self.calls.append((expression, arg))
+        if arg is not None and isinstance(arg, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", arg):
+            return True
+        return dict(self.payloads.pop(0))
+
+
+class _ProgrammingErrorPage(_FakePage):
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        del expression, arg
+        raise TypeError("test programming error")
 
 
 class _FakeContext:
@@ -574,6 +591,91 @@ def test_changed_date_stale_no_slots_state_does_not_make_the_requested_date_read
     assert not _payload_is_ready(stale_payload, date(2026, 9, 23), previous_payload)
 
 
+def test_adjacent_empty_dates_complete_after_observed_loading_transition() -> None:
+    def payload(day: str, text: str) -> dict[str, Any]:
+        return {
+            "view": "booking",
+            "date": day,
+            "dates": [day],
+            "slots": [],
+            "visible_text": f"Available courts {text}".strip(),
+        }
+
+    events: list[str] = []
+    page = _SequencePage(
+        [
+            payload("2026-09-22", "No available courts"),
+            payload("2026-09-22", "No available courts"),
+            payload("2026-09-22", "No available courts"),
+            payload("2026-09-23", "No available courts Chargement en cours"),
+            payload("2026-09-23", "No available courts"),
+        ]
+    )
+    browser = _FakeBrowser(_FakeContext(page, events), events)
+    source = PlaytomicSource(
+        "padel-station",
+        "https://playtomic.com/fr/clubs/padel-station1",
+        "browser_dom",
+        None,
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+    from padel_availability.inventory import load_locations
+
+    location = next(
+        item
+        for item in load_locations(Path(__file__).parents[1] / "data" / "verified_locations.json")
+        if item.location_id == "padel-station"
+    )
+    connector = PlaytomicBrowserConnector((source,), browser_factory=lambda: browser)
+
+    result = connector.collect(
+        location,
+        run_id="run-browser",
+        window_start=date(2026, 9, 22),
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert result.slots == ()
+
+
+def test_browser_programming_errors_propagate_and_cleanup() -> None:
+    events: list[str] = []
+    page = _ProgrammingErrorPage({})
+    browser = _FakeBrowser(_FakeContext(page, events), events)
+    source = PlaytomicSource(
+        "padel-station",
+        "https://playtomic.com/fr/clubs/padel-station1",
+        "browser_dom",
+        None,
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+    from padel_availability.inventory import load_locations
+
+    location = next(
+        item
+        for item in load_locations(Path(__file__).parents[1] / "data" / "verified_locations.json")
+        if item.location_id == "padel-station"
+    )
+    connector = PlaytomicBrowserConnector((source,), browser_factory=lambda: browser)
+
+    with pytest.raises(TypeError, match="test programming error"):
+        connector.collect(
+            location,
+            run_id="run-browser",
+            window_start=date(2026, 9, 22),
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed
+
+
 def test_first_date_no_slots_marker_is_ready_when_date_was_already_selected() -> None:
     payload = {
         "view": "booking",
@@ -621,7 +723,7 @@ def test_explicit_no_slots_marker_returns_empty_tuple() -> None:
     assert parse_visible_dom(payload, date(2026, 9, 22)) == ()
 
 
-def test_disabled_slot_is_not_reported_as_available() -> None:
+def test_disabled_slot_is_reported_as_unavailable() -> None:
     payload = {
         "view": "booking",
         "date": "2026-09-22",
@@ -635,10 +737,100 @@ def test_disabled_slot_is_not_reported_as_available() -> None:
                 "disabled": True,
             }
         ],
-        "visible_text": "Available courts No available courts",
+        "visible_text": "Available courts",
     }
 
-    assert parse_visible_dom(payload, date(2026, 9, 22)) == ()
+    observations = parse_visible_dom(payload, date(2026, 9, 22))
+
+    assert len(observations) == 1
+    assert observations[0].status == "unavailable"
+
+
+def test_visible_slots_extract_optional_ids_and_unknown_state() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": None,
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+                "court": "Padel 1",
+            },
+            {
+                "external_id": "disabled-slot",
+                "time": "5:00 PM",
+                "duration": "60",
+                "class": "bg-primary-40",
+                "disabled": True,
+                "court": "Padel 1",
+            },
+            {
+                "external_id": None,
+                "time": "6:00 PM",
+                "duration": "60",
+                "class": "bg-primary-40",
+                "disabled": False,
+                "court": "Padel 1",
+            },
+        ],
+        "visible_text": "Available courts",
+    }
+
+    observations = parse_visible_dom(payload, date(2026, 9, 22))
+
+    assert [observation.external_id for observation in observations] == [
+        None,
+        "disabled-slot",
+        None,
+    ]
+    assert [observation.status for observation in observations] == [
+        "available",
+        "unavailable",
+        "unknown",
+    ]
+
+
+def test_missing_id_dom_slots_use_hash_and_reject_hash_collisions() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": None,
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+                "court": "Padel 1",
+            },
+            {
+                "external_id": None,
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-primary-40",
+                "disabled": False,
+                "court": "Padel 1",
+            },
+        ],
+        "visible_text": "Available courts",
+    }
+
+    observations = parse_visible_dom(payload, date(2026, 9, 22))
+
+    assert observations[0].external_id is None
+    with pytest.raises(PlaytomicSourceError, match="conflicting duplicate slot hash"):
+        parse_browser_observations(
+            observations,
+            location_id="padel-station",
+            run_id="run-browser",
+            window_start=date(2026, 9, 22),
+            window_end=date(2026, 9, 23),
+        )
 
 
 @pytest.mark.parametrize("marker", ["Log in to continue", "CAPTCHA verification required"])
@@ -797,6 +989,7 @@ def test_browser_connector_maps_success_and_closes_everything(fixture_browser: A
         collected_at="2026-09-22T07:00:00Z",
     )
 
+    connector.close()
     assert result.run.status == "success"
     assert len(result.slots) == 1
     assert result.slots[0].court_label == "Pista EL TONY MATÉ"
@@ -835,6 +1028,7 @@ def test_browser_connector_converts_dom_failure_to_source_error_and_closes() -> 
             collected_at="2026-09-22T07:00:00Z",
         )
 
+    connector.close()
     assert page.closed
     assert events[-2:] == ["context_close", "browser_exit"]
 

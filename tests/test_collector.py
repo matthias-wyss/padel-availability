@@ -321,12 +321,19 @@ def test_collection_selects_browser_once_saves_immediately_and_continues(
     sources_by_id = {source.location_id: source for source in sources}
     factory_calls: list[Sequence[PlaytomicSource]] = []
     browser_calls: list[str] = []
+    browser_lifecycle: list[str] = []
     fetch_calls: list[str] = []
 
     def browser_factory(received_sources: Sequence[PlaytomicSource]):
         factory_calls.append(received_sources)
 
         class FakeBrowserConnector:
+            def open(self) -> None:
+                browser_lifecycle.append("open")
+
+            def close(self) -> None:
+                browser_lifecycle.append("close")
+
             def collect(
                 self,
                 location: LocationRecord,
@@ -395,6 +402,7 @@ def test_collection_selects_browser_once_saves_immediately_and_continues(
 
         assert len(factory_calls) == 1
         assert factory_calls[0] == sources
+        assert browser_lifecycle == ["open", "close"]
         assert browser_calls == ["gva-palexpo", "padel-parc-etoy", "padel-station"]
         assert [urlparse(url).path.rsplit("/", 1)[-1] for url in fetch_calls] == [
             "padel-parc-preverenges",
@@ -423,6 +431,12 @@ def test_browser_error_keeps_previous_successful_snapshot_stale(tmp_path: Path) 
 
     def browser_factory(_: Sequence[PlaytomicSource]):
         class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
             def collect(
                 self,
                 location: LocationRecord,
