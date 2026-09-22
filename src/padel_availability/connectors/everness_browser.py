@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot
 from ..models import LocationRecord
 from .everness import EvernessSource, EvernessSourceError
+from .playtomic import PlaytomicSourceError
 from .playtomic_browser import (
     BrowserFactory,
     BrowserSlotObservation,
@@ -42,6 +43,11 @@ _EVERNESS_MONTHS = {
     "Dec": 12,
 }
 _EVERNESS_BLOCK_MARKERS = ("captcha", "log in", "login", "sign in", "access denied")
+_EVERNESS_UNAVAILABLE_MARKERS = (
+    "club is temporarily unavailable",
+    "service temporarily unavailable",
+    "ce club est temporairement indisponible",
+)
 _EVERNESS_LOADING_MARKERS = ("loading", "chargement", "please wait", "updating")
 _EVERNESS_TIMEOUT_MS = 15_000
 _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
@@ -88,7 +94,6 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
     normalizedText.includes('please wait') || normalizedText.includes('updating') ||
     Array.from(body.querySelectorAll('.loading, [aria-busy="true"]')).some(visible);
   const fingerprintInput = JSON.stringify({
-    dateLabel,
     courts,
     rows: rows.map(row => [row.time, row.cells.map(cell => [cell.class, cell.style])])
   });
@@ -184,6 +189,8 @@ def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSl
     if not isinstance(visible_text, str):
         raise EvernessBrowserError("visible DOM is missing visible text")
     normalized_text = " ".join(visible_text.split()).casefold()
+    if any(marker in normalized_text for marker in _EVERNESS_UNAVAILABLE_MARKERS):
+        raise EvernessBrowserError("public Everness page is explicitly unavailable")
     if any(marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS):
         raise EvernessBrowserError("public Everness page is blocked by login or CAPTCHA")
     loading = dom.get("loading")
@@ -327,6 +334,8 @@ def _everness_payload_text(payload: object) -> str:
     if not isinstance(visible_text, str):
         raise EvernessBrowserError("visible DOM is missing visible text")
     normalized_text = " ".join(visible_text.split()).casefold()
+    if any(marker in normalized_text for marker in _EVERNESS_UNAVAILABLE_MARKERS):
+        raise EvernessBrowserError("public Everness page is explicitly unavailable")
     if any(marker in normalized_text for marker in _EVERNESS_BLOCK_MARKERS):
         raise EvernessBrowserError("public Everness page is blocked by login or CAPTCHA")
     return normalized_text
@@ -566,17 +575,20 @@ class EvernessBrowserConnector:
         except (EvernessBrowserError, EvernessSourceError):
             raise
         except Exception as error:
-            if isinstance(error, RuntimeError) or _is_documented_browser_error(error):
+            if _is_documented_browser_error(error):
                 raise EvernessSourceError("browser navigation or extraction failed") from error
             raise
 
-        slots = parse_everness_observations(
-            tuple(observations),
-            location_id=location.location_id,
-            run_id=run_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
+        try:
+            slots = parse_everness_observations(
+                tuple(observations),
+                location_id=location.location_id,
+                run_id=run_id,
+                window_start=window_start,
+                window_end=window_end,
+            )
+        except PlaytomicSourceError as error:
+            raise EvernessSourceError(str(error)[:160]) from error
         run = AvailabilityRun(
             run_id,
             location.location_id,

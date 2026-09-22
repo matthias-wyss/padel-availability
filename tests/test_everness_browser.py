@@ -7,6 +7,7 @@ from typing import Any, Self, cast
 
 import pytest
 
+from padel_availability.connectors import everness_browser
 from padel_availability.connectors.everness import EvernessSource, EvernessSourceError
 from padel_availability.connectors.everness_browser import (
     _EVERNESS_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
@@ -15,6 +16,7 @@ from padel_availability.connectors.everness_browser import (
     parse_everness_dom,
     parse_everness_observations,
 )
+from padel_availability.connectors.playtomic import PlaytomicSourceError
 from padel_availability.models import LocationRecord
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "everness" / "dom"
@@ -55,10 +57,14 @@ def fixture_browser() -> Any:
 
 
 def _browser_payload(browser: Any, name: str) -> dict[str, object]:
+    return _browser_payload_html(browser, (FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8"))
+
+
+def _browser_payload_html(browser: Any, html: str) -> dict[str, object]:
     context = browser.new_context()
     page = context.new_page()
     try:
-        page.set_content((FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8"))
+        page.set_content(html)
         page.add_style_tag(
             content=(
                 "#multi-language-date, #table_reservation, .table_header, "
@@ -155,6 +161,19 @@ def test_everness_loading_page_is_not_final_data() -> None:
 @pytest.mark.parametrize("marker", ["Log in to continue", "CAPTCHA verification required"])
 def test_everness_login_or_captcha_is_bounded_error(marker: str) -> None:
     with pytest.raises(ValueError, match="blocked"):
+        parse_everness_dom(_payload([], visible_text=marker), REQUESTED_DATE)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "Club is temporarily unavailable",
+        "Service temporarily unavailable",
+        "Ce club est temporairement indisponible",
+    ],
+)
+def test_everness_unavailable_marker_is_bounded_error(marker: str) -> None:
+    with pytest.raises(EvernessBrowserError, match="unavailable"):
         parse_everness_dom(_payload([], visible_text=marker), REQUESTED_DATE)
 
 
@@ -272,6 +291,16 @@ def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) ->
     assert [observation.status for observation in observations] == ["available", "unavailable"]
 
 
+def test_everness_visible_fingerprint_ignores_date_label(fixture_browser: Any) -> None:
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    first = _browser_payload_html(fixture_browser, html)
+    second = _browser_payload_html(fixture_browser, html.replace("22 Sep 2026", "23 Sep 2026"))
+
+    assert first["date_label"] == "22 Sep 2026"
+    assert second["date_label"] == "23 Sep 2026"
+    assert first["grid_fingerprint"] == second["grid_fingerprint"]
+
+
 def test_everness_body_loading_markers_are_not_final_data(fixture_browser: Any) -> None:
     payload = _browser_payload(fixture_browser, "booking-loading")
 
@@ -315,7 +344,7 @@ class _FakeEvernessPage:
         initial_date: date,
         events: list[str],
         *,
-        programming_error: bool = False,
+        programming_error: type[Exception] | None = None,
     ) -> None:
         self.dates = dates
         self.current_date = initial_date
@@ -344,8 +373,8 @@ class _FakeEvernessPage:
         del arg
         if expression != _EVERNESS_VISIBLE_DOM_SCRIPT:
             raise AssertionError(f"unexpected page evaluation: {expression!r}")
-        if self.programming_error:
-            raise TypeError("test programming error")
+        if self.programming_error is not None:
+            raise self.programming_error("test programming error")
         return self.payload
 
     def wait_for_timeout(self, timeout: int) -> None:
@@ -490,7 +519,7 @@ def _everness_connector(
     events: list[str],
     *,
     initial_date: date,
-    programming_error: bool = False,
+    programming_error: type[Exception] | None = None,
     timeout_ms: int = 15_000,
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
     page = _FakeEvernessPage(dates, initial_date, events, programming_error=programming_error)
@@ -642,7 +671,7 @@ def test_everness_programming_errors_propagate_and_cleanup() -> None:
     events: list[str] = []
     dates = {REQUESTED_DATE: [_everness_payload(REQUESTED_DATE, fingerprint="grid-1", rows=[])]}
     connector, page, context = _everness_connector(
-        dates, events, initial_date=REQUESTED_DATE, programming_error=True
+        dates, events, initial_date=REQUESTED_DATE, programming_error=TypeError
     )
 
     with pytest.raises(TypeError, match="programming"):
@@ -657,3 +686,49 @@ def test_everness_programming_errors_propagate_and_cleanup() -> None:
 
     assert page.closed and context.closed
     assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+
+
+def test_everness_runtime_errors_propagate_and_cleanup() -> None:
+    events: list[str] = []
+    dates = {REQUESTED_DATE: [_everness_payload(REQUESTED_DATE, fingerprint="grid-1", rows=[])]}
+    connector, page, context = _everness_connector(
+        dates, events, initial_date=REQUESTED_DATE, programming_error=RuntimeError
+    )
+
+    with pytest.raises(RuntimeError, match="programming"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=REQUESTED_DATE,
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
+    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+
+
+def test_everness_connector_maps_normalization_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    dates = {REQUESTED_DATE: [_everness_payload(REQUESTED_DATE, fingerprint="grid-1", rows=[])]}
+    connector, page, context = _everness_connector(
+        dates, events, initial_date=REQUESTED_DATE
+    )
+
+    def fail_normalization(*_args: object, **_kwargs: object) -> tuple[object, ...]:
+        raise PlaytomicSourceError("conflicting duplicate slot hash")
+
+    monkeypatch.setattr(everness_browser, "parse_everness_observations", fail_normalization)
+
+    with pytest.raises(EvernessSourceError, match="duplicate"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=REQUESTED_DATE,
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
