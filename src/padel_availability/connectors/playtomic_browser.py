@@ -196,12 +196,20 @@ def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
     return first
 
 
-_SLOT_DATE = re.compile(r"(?<![0-9])([0-9]{4}-[0-9]{2}-[0-9]{2})T")
+_SLOT_TIMESTAMP = re.compile(r"(?<![0-9])([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}Z)")
 
 
 def _slot_matches_date(external_id: str, requested_date: date) -> bool:
-    match = _SLOT_DATE.search(external_id)
-    return match is not None and match.group(1) == requested_date.isoformat()
+    match = _SLOT_TIMESTAMP.search(external_id)
+    if match is None:
+        return False
+    try:
+        slot_date = datetime.strptime(match.group(1), "%Y-%m-%dT%H-%MZ").replace(
+            tzinfo=UTC
+        ).astimezone(_ZURICH).date()
+    except ValueError:
+        return False
+    return slot_date == requested_date
 
 
 def _parse_visible_slot(item: object, requested_date: date) -> BrowserSlotObservation | None:
@@ -406,7 +414,9 @@ def _default_browser_factory() -> _BrowserSession:
     return _PlaywrightBrowserSession()
 
 
-def _payload_is_ready(payload: object, requested_date: date) -> bool:
+def _payload_is_ready(
+    payload: object, requested_date: date, previous_payload: object | None = None
+) -> bool:
     if not isinstance(payload, Mapping):
         return False
     dom = cast(Mapping[str, object], payload)
@@ -422,8 +432,31 @@ def _payload_is_ready(payload: object, requested_date: date) -> bool:
         return True
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
-        return any(marker in normalized_text for marker in _NO_SLOT_MARKERS)
+        if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
+            previous_date = _payload_date(previous_payload)
+            if previous_date != requested_date.isoformat():
+                return _payload_content(dom) != _payload_content(previous_payload)
+            return True
     return False
+
+
+def _payload_date(payload: object) -> str | None:
+    if not isinstance(payload, Mapping):
+        return None
+    dom = cast(Mapping[str, object], payload)
+    value = dom.get("date")
+    return value if isinstance(value, str) else None
+
+
+def _payload_content(payload: object) -> tuple[object, str] | None:
+    if not isinstance(payload, Mapping):
+        return None
+    dom = cast(Mapping[str, object], payload)
+    visible_text = dom.get("visible_text")
+    normalized_text = (
+        " ".join(visible_text.split()).casefold() if isinstance(visible_text, str) else ""
+    )
+    return dom.get("slots"), normalized_text
 
 
 def _has_requested_date_slot(slots: list[object], requested_date: date) -> bool:
@@ -437,12 +470,17 @@ def _has_requested_date_slot(slots: list[object], requested_date: date) -> bool:
     return False
 
 
-def _wait_for_visible_dom(page: _BrowserPage, requested_date: date, timeout_ms: int) -> object:
+def _wait_for_visible_dom(
+    page: _BrowserPage,
+    requested_date: date,
+    timeout_ms: int,
+    previous_payload: object | None = None,
+) -> object:
     attempts = max(1, timeout_ms // 100)
     payload: object = None
     for _ in range(attempts):
         payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
-        if _payload_is_ready(payload, requested_date):
+        if _payload_is_ready(payload, requested_date, previous_payload):
             return payload
         page.wait_for_timeout(100)
     raise PlaytomicBrowserError("timed out waiting for the visible booking view")
@@ -516,8 +554,14 @@ class PlaytomicBrowserConnector:
                         page.goto(source_url, wait_until="commit", timeout=self._timeout_ms)
                         current_date = window_start
                         while current_date < window_end:
+                            previous_payload = page.evaluate(_VISIBLE_DOM_SCRIPT)
                             _select_date(page, current_date)
-                            payload = _wait_for_visible_dom(page, current_date, self._timeout_ms)
+                            payload = _wait_for_visible_dom(
+                                page,
+                                current_date,
+                                self._timeout_ms,
+                                previous_payload,
+                            )
                             try:
                                 observations.extend(parse_visible_dom(payload, current_date))
                             except PlaytomicBrowserUnavailable:

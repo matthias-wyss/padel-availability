@@ -42,20 +42,30 @@ def fixture_browser() -> Any:
     except ImportError as error:
         pytest.skip(f"Playwright is unavailable: {error}")
 
-    os.environ["FONTCONFIG_FILE"] = str(FONTCONFIG_FILE)
+    previous_fontconfig = os.environ.get("FONTCONFIG_FILE")
+    font_dir = Path("/tmp/opencode/playwright-libs/usr/share/fonts")
+    if font_dir.is_dir():
+        os.environ["FONTCONFIG_FILE"] = str(FONTCONFIG_FILE)
     playwright = sync_playwright().start()
     browser = None
     try:
         try:
             browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_ARGS))
         except PlaywrightError as error:
-            pytest.skip(f"Playwright browser is unavailable: {error}")
+            pytest.fail(
+                "Playwright is installed but Chromium failed to launch. "
+                "Install Chromium's shared libraries or set LD_LIBRARY_PATH for the "
+                f"browser runtime. Original error: {error}"
+            )
         yield browser
     finally:
         if browser is not None:
             browser.close()
         playwright.stop()
-        os.environ.pop("FONTCONFIG_FILE", None)
+        if previous_fontconfig is None:
+            os.environ.pop("FONTCONFIG_FILE", None)
+        else:
+            os.environ["FONTCONFIG_FILE"] = previous_fontconfig
 
 
 def _fixture_payload(name: str, browser: Any) -> dict[str, Any]:
@@ -94,7 +104,7 @@ class _FakePage:
         if arg is not None and isinstance(arg, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", arg):
             self.payload["date"] = arg
             return True
-        return self.payload
+        return dict(self.payload)
 
     def close(self) -> None:
         self.closed = True
@@ -201,6 +211,66 @@ def test_old_date_slots_do_not_make_the_requested_date_ready() -> None:
         },
         date(2026, 9, 23),
     )
+
+
+def test_changed_date_stale_no_slots_state_does_not_make_the_requested_date_ready() -> None:
+    previous_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": "slot-2026-09-22T13-30Z-90",
+                "time": "3:30 PM",
+                "duration": "90",
+                "class": "bg-white",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts No available courts",
+    }
+    stale_payload = {
+        **previous_payload,
+        "date": "2026-09-23",
+        "dates": ["2026-09-23"],
+    }
+
+    assert not _payload_is_ready(stale_payload, date(2026, 9, 23), previous_payload)
+
+
+def test_first_date_no_slots_marker_is_ready_when_date_was_already_selected() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [],
+        "visible_text": "Available courts No available courts",
+    }
+
+    assert _payload_is_ready(payload, date(2026, 9, 22), payload)
+
+
+def test_utc_slot_id_is_compared_as_a_zurich_local_date() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [
+            {
+                "external_id": "boundary-2026-09-21T22-30Z-60",
+                "time": "12:30 AM",
+                "duration": "60",
+                "class": "bg-white",
+                "court": "Padel 1",
+                "disabled": False,
+            }
+        ],
+        "visible_text": "Available courts",
+    }
+
+    observation = parse_visible_dom(payload, date(2026, 9, 22))[0]
+
+    assert observation.starts_at == "2026-09-22T00:30:00+02:00"
 
 
 def test_explicit_no_slots_marker_returns_empty_tuple() -> None:
