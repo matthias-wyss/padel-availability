@@ -325,6 +325,21 @@ def _airpad_exact_visible_locator(
     return matches[0]
 
 
+def _wait_for_exact_visible_locator(
+    page: _AirpadPage,
+    frame: _AirpadFrame,
+    selector: str,
+    text: str,
+    timeout_ms: int,
+) -> _AirpadLocator:
+    for _ in range(max(1, timeout_ms // 100)):
+        try:
+            return _airpad_exact_visible_locator(frame, selector, text)
+        except AirpadBrowserError:
+            page.wait_for_timeout(100)
+    raise AirpadBrowserError(f"visible AIRPAD location label {text!r} was not found exactly once")
+
+
 def _wait_for_visible_locator(
     page: _AirpadPage, frame: _AirpadFrame, selector: str, timeout_ms: int
 ) -> _AirpadLocator:
@@ -398,6 +413,7 @@ def _wait_for_airpad_date(
                     not require_refresh
                     or refresh_observed
                     or _airpad_grid(dom) != previous_grid
+                    or dom.get("empty_grid") is True
                 )
             ):
                 return dom
@@ -601,16 +617,9 @@ class AirpadBrowserConnector:
                     frame = _airpad_frame(page, self._timeout_ms)
                     _airpad_exact_visible_locator(frame, ".item-title", "1.Terrains").click()
                     label = AIRPAD_LOCATION_LABELS[location.location_id]
-                    cards = frame.locator(".activity-card")
-                    for _ in range(max(1, self._timeout_ms // 100)):
-                        if any(
-                            cards.nth(index).is_visible() for index in range(cards.count())
-                        ):
-                            break
-                        page.wait_for_timeout(100)
-                    else:
-                        raise AirpadBrowserError("visible AIRPAD location cards were not found")
-                    _airpad_exact_visible_locator(frame, ".activity-card", label).click()
+                    _wait_for_exact_visible_locator(
+                        page, frame, ".activity-card", label, self._timeout_ms
+                    ).click()
                     _wait_for_selected_airpad_location(page, frame, label, self._timeout_ms)
                     _wait_for_visible_locator(page, frame, ".btn-date-calendar", self._timeout_ms)
                     _wait_for_visible_locator(page, frame, ".select-time-range", self._timeout_ms)

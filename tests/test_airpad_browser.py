@@ -391,7 +391,7 @@ class _FakeAirpadLocator:
         return self.count() == 1
 
     def click(self) -> None:
-        self.frame.click(self.selector, self.text)
+        self.frame.click(self.selector, self.text, self.index)
 
     def all_inner_texts(self) -> list[str]:
         return self.frame.inner_texts(self.selector)
@@ -417,6 +417,7 @@ class _FakeAirpadFrame:
         arrow_disabled: bool = False,
         arrow_stuck: bool = False,
         stale_payloads: dict[date, list[dict[str, object]]] | None = None,
+        activity_sequences: list[list[str]] | None = None,
     ) -> None:
         self.url = url
         self.dates = dates
@@ -432,6 +433,8 @@ class _FakeAirpadFrame:
         self.selected_activity: str | None = None
         self.wait_ticks = 0
         self._stale_reads = 0
+        self.activity_sequences = activity_sequences or []
+        self._activity_sequence_index = 0
 
     @property
     def current_range(self) -> tuple[str, dict[str, object]]:
@@ -473,7 +476,7 @@ class _FakeAirpadFrame:
             return len(values)
         return sum(text in value for value in values)
 
-    def click(self, selector: str, text: str | None) -> None:
+    def click(self, selector: str, text: str | None, index: int | None = None) -> None:
         self.events.append(f"click:{selector}:{text or ''}")
         if self.programming_error:
             raise TypeError("test programming error")
@@ -481,7 +484,10 @@ class _FakeAirpadFrame:
             return
         if selector == ".activity-card":
             self.selected_activity = next(
-                label for label in self.activity_labels if text is None or text in label
+                label
+                for label in self.activity_labels
+                if (index is None or label == self.activity_labels[index])
+                and (text is None or text in label)
             )
             return
         if selector.startswith("button.days-btn"):
@@ -535,6 +541,9 @@ class _FakeAirpadFrame:
 
     def wait(self) -> None:
         self.wait_ticks += 1
+        if self._activity_sequence_index + 1 < len(self.activity_sequences):
+            self._activity_sequence_index += 1
+            self.activity_labels = self.activity_sequences[self._activity_sequence_index]
 
 
 class _FakeAirpadPage:
@@ -832,7 +841,7 @@ def test_airpad_activity_card_requires_exact_visible_label() -> None:
         events,
         activity_labels=["LA PRAILLE EXTENDED"],
     )
-    connector, page, _context = _airpad_connector(frame, events)
+    connector, page, _context = _airpad_connector(frame, events, timeout_ms=100)
 
     with pytest.raises(AirpadBrowserError, match="location"):
         connector.collect(
@@ -986,3 +995,56 @@ def test_airpad_connector_waits_for_booking_controls_after_location_click() -> N
 
     assert result.slots == ()
     assert "wait:100" in events
+
+
+def test_airpad_connector_accepts_consecutive_valid_empty_grids() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {
+            first: [("09:00", _airpad_payload(first, slots=[]))],
+            second: [("09:00", _airpad_payload(second, slots=[]))],
+        },
+        first,
+        events,
+    )
+    connector, _page, _context = _airpad_connector(frame, events, timeout_ms=100)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.slots == ()
+
+
+def test_airpad_connector_waits_for_requested_card_after_other_card() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {requested: [("09:00", _airpad_payload(requested, slots=[]))]},
+        requested,
+        events,
+        activity_labels=["MEYRIN"],
+        activity_sequences=[["MEYRIN"], ["MEYRIN", "LA PRAILLE"]],
+    )
+    connector, _page, _context = _airpad_connector(frame, events)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.slots == ()
+    assert frame.selected_activity == "LA PRAILLE"
