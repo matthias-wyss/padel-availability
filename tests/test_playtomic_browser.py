@@ -52,11 +52,11 @@ def fixture_browser() -> Any:
     try:
         try:
             browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_ARGS))
-        except PlaywrightError as error:
-            pytest.fail(
-                "Playwright is installed but Chromium failed to launch. "
-                "Install Chromium's shared libraries or set LD_LIBRARY_PATH for the "
-                f"browser runtime. Original error: {error}"
+        except (OSError, PlaywrightError) as error:
+            pytest.skip(
+                "Playwright is installed but Chromium could not launch. Install Chromium's "
+                "shared libraries or set LD_LIBRARY_PATH to the browser runtime, then retry. "
+                f"Original error: {error}"
             )
         yield browser
     finally:
@@ -168,6 +168,22 @@ def _has_class(element: _HtmlElement, name: str) -> bool:
     return name in (element.get_attribute("class") or "").split()
 
 
+def _inline_styles(element: _HtmlElement) -> dict[str, str]:
+    return {
+        part.split(":", 1)[0].strip().casefold(): part.split(":", 1)[1].strip().casefold()
+        for part in (element.get_attribute("style") or "").split(";")
+        if ":" in part
+    }
+
+
+def _is_hidden(element: _HtmlElement) -> bool:
+    return any(
+        (styles := _inline_styles(current)).get("display") == "none"
+        or styles.get("visibility") == "hidden"
+        for current in [element, *_ancestors(element)]
+    )
+
+
 def _matches_selector(element: _HtmlElement, selector: str) -> bool:
     if selector == "h2":
         return element.tag == "h2"
@@ -192,15 +208,21 @@ def _matches_selector(element: _HtmlElement, selector: str) -> bool:
 
 
 def _is_visible(element: _HtmlElement) -> bool:
+    if _is_hidden(element):
+        return False
     for current in [element, *_ancestors(element)]:
-        style = {
-            part.split(":", 1)[0].strip(): part.split(":", 1)[1].strip()
-            for part in (current.get_attribute("style") or "").split(";")
-            if ":" in part
-        }
-        if style.get("display") == "none" or style.get("visibility") == "hidden":
+        styles = _inline_styles(current)
+        if styles.get("width") in {"0", "0px"} or styles.get("height") in {"0", "0px"}:
             return False
     return True
+
+
+def _visible_text(element: _HtmlElement) -> str:
+    if _is_hidden(element):
+        return ""
+    return "".join(
+        child if isinstance(child, str) else _visible_text(child) for child in element.children
+    )
 
 
 class _SelectorPage:
@@ -216,7 +238,7 @@ class _SelectorPage:
         heading = any(
             _is_visible(element)
             and re.search(
-                r"available courts|terrains disponibles", element.text_content(), re.IGNORECASE
+                r"available courts|terrains disponibles", _visible_text(element), re.IGNORECASE
             )
             is not None
             for element in headings
@@ -252,7 +274,7 @@ class _SelectorPage:
             "date": date_value,
             "dates": dates,
             "slots": slots,
-            "visible_text": self.body.text_content(),
+            "visible_text": _visible_text(self.body),
         }
 
 
@@ -366,6 +388,47 @@ def test_visible_dom_script_allows_visible_slots_with_zero_height_ancestors() ->
     assert "(current !== document.body && (rect.width === 0 || rect.height === 0))" not in (
         _VISIBLE_DOM_SCRIPT
     )
+
+
+@pytest.mark.parametrize("zero_style", ["width:0", "height:0", "width:0px", "height:0px"])
+@pytest.mark.parametrize("on_ancestor", [False, True])
+def test_selector_fake_excludes_zero_size_slots(zero_style: str, on_ancestor: bool) -> None:
+    ancestor_style = zero_style if on_ancestor else ""
+    slot_style = "" if on_ancestor else zero_style
+    payload = _SelectorPage(
+        f"""
+        <h2>Available courts</h2>
+        <input type="date" value="2026-09-22">
+        <div class="flex border-b" style="{ancestor_style}">
+          <div class="shrink-0"><div class="truncate">Padel A</div></div>
+          <div data-slot-id="slot-1" data-tracking-property-time="3:30 PM"
+               data-tracking-property-duration="90" class="bg-white"
+               style="{slot_style}"></div>
+        </div>
+        """
+    ).evaluate(_VISIBLE_DOM_SCRIPT)
+
+    assert isinstance(payload, dict)
+    assert payload["slots"] == []
+
+
+def test_selector_fake_inner_text_omits_hidden_no_slot_marker() -> None:
+    payload = _SelectorPage(
+        """
+        <h2>Available courts</h2>
+        <input type="date" value="2026-09-22">
+        <div style="display:none">No available courts</div>
+        <div style="visibility:hidden">No available courts</div>
+        """
+    ).evaluate(_VISIBLE_DOM_SCRIPT)
+
+    assert isinstance(payload, dict)
+    dom_payload = cast(dict[str, Any], payload)
+    visible_text = dom_payload["visible_text"]
+    assert isinstance(visible_text, str)
+    assert "no available courts" not in visible_text.casefold()
+    with pytest.raises(PlaytomicBrowserError, match="no explicit availability state"):
+        parse_visible_dom(dom_payload, date(2026, 9, 22))
 
 
 def test_chromium_launch_disables_the_unavailable_gpu_font_path() -> None:
