@@ -51,7 +51,16 @@ _VISIBLE_DOM_SCRIPT = """
       court: row?.querySelector('div.shrink-0 .truncate')?.textContent?.trim() || null
     };
   });
-  return {view: heading ? 'booking' : 'unknown', date, dates, slots, visible_text: body.innerText || ''};
+  const courtRows = Array.from(body.querySelectorAll('div.flex.border-b'))
+    .filter(element => visible(element) && element.querySelector('div.shrink-0 .truncate'));
+  return {
+    view: heading ? 'booking' : 'unknown',
+    date,
+    dates,
+    slots,
+    empty_grid: heading && slots.length === 0 && courtRows.length > 0,
+    visible_text: body.innerText || ''
+  };
 }
 """
 _SELECT_DATE_SCRIPT = """
@@ -279,7 +288,9 @@ def parse_visible_dom(payload: object, requested_date: date) -> tuple[BrowserSlo
     observations = tuple(_parse_visible_slot(item, requested_date) for item in raw_slots)
     if observations:
         return observations
-    if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
+    if dom.get("empty_grid") is True or any(
+        marker in normalized_text for marker in _NO_SLOT_MARKERS
+    ):
         return ()
     raise PlaytomicBrowserError("visible booking view has no explicit availability state")
 
@@ -452,6 +463,8 @@ def _payload_is_ready(
     slots = dom.get("slots")
     if isinstance(slots, list) and _has_visible_slot(cast(list[object], slots)):
         return not date_changed or payload_changed or refresh_observed
+    if dom.get("empty_grid") is True:
+        return not date_changed or payload_changed or refresh_observed
     if isinstance(visible_text, str):
         normalized_text = " ".join(visible_text.split()).casefold()
         if any(marker in normalized_text for marker in _NO_SLOT_MARKERS):
@@ -481,7 +494,7 @@ def _payload_content(payload: object) -> tuple[object, tuple[bool, bool, bool, b
         any(marker in normalized_text for marker in _BLOCK_MARKERS),
         any(marker in normalized_text for marker in _LOADING_MARKERS),
     )
-    return dom.get("slots"), marker_state
+    return (dom.get("slots"), dom.get("empty_grid") is True), marker_state
 
 
 def _has_visible_slot(slots: list[object]) -> bool:

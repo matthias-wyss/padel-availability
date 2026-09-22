@@ -268,11 +268,17 @@ class _SelectorPage:
                     "court": court.text_content().strip() if court is not None else None,
                 }
             )
+        court_rows = [
+            row
+            for row in self.body.query_selector_all("div.flex.border-b")
+            if row.query_selector("div.shrink-0 .truncate") is not None
+        ]
         return {
             "view": "booking" if heading else "unknown",
             "date": date_value,
             "dates": dates,
             "slots": slots,
+            "empty_grid": heading and not slots and bool(court_rows),
             "visible_text": _visible_text(self.body),
         }
 
@@ -448,6 +454,21 @@ def test_selector_fake_inner_text_omits_hidden_no_slot_marker() -> None:
         parse_visible_dom(dom_payload, date(2026, 9, 22))
 
 
+def test_selector_fake_recognizes_a_loaded_empty_booking_grid() -> None:
+    payload = _SelectorPage(
+        """
+        <h2>Terrains disponibles</h2>
+        <input type="date" value="2026-09-22">
+        <div class="flex border-b">
+          <div class="shrink-0"><div class="truncate">Padel A</div></div>
+        </div>
+        """
+    ).evaluate(_VISIBLE_DOM_SCRIPT)
+
+    assert isinstance(payload, dict)
+    assert payload["empty_grid"] is True
+
+
 def test_chromium_launch_disables_the_unavailable_gpu_font_path() -> None:
     assert "--disable-gpu" in _CHROMIUM_ARGS
 
@@ -589,6 +610,64 @@ def test_changed_date_stale_no_slots_state_does_not_make_the_requested_date_read
     }
 
     assert not _payload_is_ready(stale_payload, date(2026, 9, 23), previous_payload)
+
+
+def test_loaded_empty_grid_requires_refresh_for_a_changed_date() -> None:
+    previous_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [],
+        "empty_grid": True,
+        "visible_text": "Terrains disponibles",
+    }
+    empty_payload = {
+        **previous_payload,
+        "date": "2026-09-23",
+        "dates": ["2026-09-23"],
+    }
+
+    assert not _payload_is_ready(empty_payload, date(2026, 9, 23), previous_payload)
+    assert _payload_is_ready(
+        empty_payload,
+        date(2026, 9, 23),
+        previous_payload,
+        refresh_observed=True,
+    )
+
+
+def test_first_loaded_empty_grid_can_follow_the_initial_booking_shell() -> None:
+    initial_payload = {
+        "view": "unknown",
+        "date": "",
+        "dates": [],
+        "slots": [],
+        "empty_grid": False,
+        "visible_text": "Pour les joueurs",
+    }
+    empty_payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [],
+        "empty_grid": True,
+        "visible_text": "Terrains disponibles",
+    }
+
+    assert _payload_is_ready(empty_payload, date(2026, 9, 22), initial_payload)
+
+
+def test_loaded_empty_grid_parses_as_zero_slots() -> None:
+    payload = {
+        "view": "booking",
+        "date": "2026-09-22",
+        "dates": ["2026-09-22"],
+        "slots": [],
+        "empty_grid": True,
+        "visible_text": "Terrains disponibles",
+    }
+
+    assert parse_visible_dom(payload, date(2026, 9, 22)) == ()
 
 
 def test_adjacent_empty_dates_complete_after_observed_loading_transition() -> None:
