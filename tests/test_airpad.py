@@ -53,7 +53,7 @@ def test_load_airpad_sources_rejects_missing_or_extra_location(tmp_path: Path) -
     with pytest.raises(AirpadSourceError):
         load_airpad_sources(path)
 
-    write_manifest(path, manifest_rows(LOCATION_IDS + ("airpad-extra",)))
+    write_manifest(path, manifest_rows(LOCATION_IDS[:-1] + ("airpad-unknown",)))
     with pytest.raises(AirpadSourceError):
         load_airpad_sources(path)
 
@@ -61,6 +61,61 @@ def test_load_airpad_sources_rejects_missing_or_extra_location(tmp_path: Path) -
 def test_load_airpad_sources_rejects_duplicate_rows(tmp_path: Path) -> None:
     path = tmp_path / "airpad_sources.json"
     write_manifest(path, manifest_rows(LOCATION_IDS[:-1] + (LOCATION_IDS[0],)))
+
+    with pytest.raises(AirpadSourceError):
+        load_airpad_sources(path)
+
+
+@pytest.mark.parametrize(
+    "booking_url",
+    ("https://www.airpad.ch/private", "https://example.com/reserve"),
+)
+def test_load_airpad_sources_rejects_wrong_booking_url(
+    tmp_path: Path, booking_url: str
+) -> None:
+    path = tmp_path / "airpad_sources.json"
+    rows = manifest_rows()
+    rows[0]["booking_url"] = booking_url
+    write_manifest(path, rows)
+
+    with pytest.raises(AirpadSourceError):
+        load_airpad_sources(path)
+
+
+@pytest.mark.parametrize("checked_at", ("2026-09-22T00:00:00+02:00", "2026-09-22T00:00:00"))
+def test_load_airpad_sources_rejects_invalid_checked_at(
+    tmp_path: Path, checked_at: str
+) -> None:
+    path = tmp_path / "airpad_sources.json"
+    rows = manifest_rows()
+    rows[0]["checked_at"] = checked_at
+    write_manifest(path, rows)
+
+    with pytest.raises(AirpadSourceError):
+        load_airpad_sources(path)
+
+
+def test_load_airpad_sources_rejects_missing_or_extra_row_fields(tmp_path: Path) -> None:
+    path = tmp_path / "airpad_sources.json"
+
+    rows = manifest_rows()
+    del rows[0]["status"]
+    write_manifest(path, rows)
+    with pytest.raises(AirpadSourceError):
+        load_airpad_sources(path)
+
+    rows = manifest_rows()
+    rows[0]["extra"] = "not allowed"
+    write_manifest(path, rows)
+    with pytest.raises(AirpadSourceError):
+        load_airpad_sources(path)
+
+
+def test_load_airpad_sources_rejects_invalid_status(tmp_path: Path) -> None:
+    path = tmp_path / "airpad_sources.json"
+    rows = manifest_rows()
+    rows[0]["status"] = "members"
+    write_manifest(path, rows)
 
     with pytest.raises(AirpadSourceError):
         load_airpad_sources(path)
