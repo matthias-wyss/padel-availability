@@ -1,14 +1,17 @@
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Protocol, cast
 from zoneinfo import ZoneInfo
 
-from ..availability import AvailabilitySlot
-from ..models import ModelError
-from .airpad import AirpadSourceError
+from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot
+from ..models import LocationRecord, ModelError
+from .airpad import AIRPAD_LOCATION_LABELS, AirpadSource, AirpadSourceError
 from .playtomic_browser import (
+    BrowserFactory,
     BrowserSlotObservation,
+    _is_documented_browser_error,  # pyright: ignore[reportPrivateUsage]
+    default_browser_factory,
     parse_browser_observations,
 )
 
@@ -19,6 +22,22 @@ _AIRPAD_BLOCK_MARKERS = (
     "sign in",
     "login",
     "access denied",
+)
+_AIRPAD_BROWSER_URL_PREFIX = "https://airpad.doinsport.club/"
+_AIRPAD_TIMEOUT_MS = 15_000
+_AIRPAD_MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 )
 
 
@@ -222,13 +241,154 @@ def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlot
 
 
 class _AirpadPage(Protocol):
+    @property
+    def frames(self) -> Sequence["_AirpadFrame"]: ...
+
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
+
+    def wait_for_timeout(self, timeout: int) -> None: ...
+
     def evaluate(self, expression: str, arg: object = None) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _AirpadLocator(Protocol):
+    def filter(self, *, has_text: str) -> "_AirpadLocator": ...
+
+    def count(self) -> int: ...
+
+    def is_visible(self) -> bool: ...
+
+    def click(self) -> None: ...
+
+    def all_inner_texts(self) -> list[str]: ...
+
+
+class _AirpadFrame(Protocol):
+    @property
+    def url(self) -> str: ...
+
+    def locator(self, selector: str) -> _AirpadLocator: ...
+
+    def evaluate(self, expression: str, arg: object = None) -> object: ...
+
+
+class _AirpadContext(Protocol):
+    def new_page(self) -> _AirpadPage: ...
+
+    def close(self) -> None: ...
+
+
+class _AirpadBrowser(Protocol):
+    def new_context(self) -> object: ...
+
+    def __exit__(self, *args: object) -> None: ...
 
 
 def extract_airpad_observations(
     page: _AirpadPage, requested_date: date
 ) -> tuple[BrowserSlotObservation, ...]:
     return parse_airpad_dom(page.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT), requested_date)
+
+
+def _airpad_visible_locator(
+    frame: _AirpadFrame, selector: str, *, text: str | None = None
+) -> _AirpadLocator:
+    locator = frame.locator(selector)
+    if text is not None:
+        locator = locator.filter(has_text=text)
+    if locator.count() != 1 or not locator.is_visible():
+        raise AirpadBrowserError(f"visible AIRPAD control {selector} was not found")
+    return locator
+
+
+def _airpad_frame(page: _AirpadPage, timeout_ms: int) -> _AirpadFrame:
+    for _ in range(max(1, timeout_ms // 100)):
+        frames = [frame for frame in page.frames if frame.url.startswith(_AIRPAD_BROWSER_URL_PREFIX)]
+        if len(frames) == 1:
+            return frames[0]
+        if len(frames) > 1:
+            raise AirpadBrowserError("visible AIRPAD booking frame selection was ambiguous")
+        page.wait_for_timeout(100)
+    raise AirpadBrowserError("visible AIRPAD booking frame was not found")
+
+
+def _airpad_date_label(requested_date: date) -> str:
+    return f"{_AIRPAD_MONTHS[requested_date.month - 1]} {requested_date.day}, {requested_date.year}"
+
+
+def _wait_for_airpad_date(
+    page: _AirpadPage, frame: _AirpadFrame, requested_date: date, timeout_ms: int
+) -> object:
+    for _ in range(max(1, timeout_ms // 100)):
+        payload = frame.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT)
+        if isinstance(payload, Mapping):
+            dom = cast(Mapping[str, object], payload)
+            if dom.get("date") == requested_date.isoformat():
+                return dom
+        page.wait_for_timeout(100)
+    raise AirpadBrowserError("timed out waiting for the requested AIRPAD date")
+
+
+def _select_airpad_date(
+    page: _AirpadPage, frame: _AirpadFrame, requested_date: date, timeout_ms: int
+) -> object:
+    _airpad_visible_locator(frame, ".btn-date-calendar").click()
+    label = _airpad_date_label(requested_date)
+    _airpad_visible_locator(frame, f'button.days-btn[aria-label="{label}"]').click()
+    return _wait_for_airpad_date(page, frame, requested_date, timeout_ms)
+
+
+def _airpad_time_range_label(frame: _AirpadFrame) -> str:
+    locator = _airpad_visible_locator(frame, ".select-time-range")
+    labels = [label.strip() for label in locator.all_inner_texts() if label.strip()]
+    if len(labels) != 1:
+        raise AirpadBrowserError("visible AIRPAD time range is ambiguous")
+    return labels[0]
+
+
+def _advance_airpad_time_range(
+    page: _AirpadPage,
+    frame: _AirpadFrame,
+    previous_label: str,
+    timeout_ms: int,
+) -> tuple[str, object]:
+    _airpad_visible_locator(frame, ".btn-arrow-right").click()
+    for _ in range(max(1, timeout_ms // 100)):
+        page.wait_for_timeout(100)
+        label = _airpad_time_range_label(frame)
+        payload = frame.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT)
+        if label != previous_label:
+            return label, payload
+    raise AirpadBrowserError("timed out waiting for the next AIRPAD time range")
+
+
+def _collect_airpad_date(
+    page: _AirpadPage,
+    frame: _AirpadFrame,
+    requested_date: date,
+    timeout_ms: int,
+) -> list[BrowserSlotObservation]:
+    payload = _select_airpad_date(page, frame, requested_date, timeout_ms)
+    observations: list[BrowserSlotObservation] = []
+    seen_ranges: set[str] = set()
+    for _ in range(8):
+        range_label = _airpad_time_range_label(frame)
+        if range_label in seen_ranges:
+            break
+        seen_ranges.add(range_label)
+        observations.extend(parse_airpad_dom(payload, requested_date))
+        arrow = frame.locator(".btn-arrow-right")
+        if arrow.count() != 1 or not arrow.is_visible():
+            break
+        _, payload = _advance_airpad_time_range(
+            page,
+            frame,
+            range_label,
+            timeout_ms,
+        )
+    return observations
 
 
 def parse_airpad_observations(
@@ -246,3 +406,136 @@ def parse_airpad_observations(
         window_start=window_start,
         window_end=window_end,
     )
+
+
+def _unavailable_result(
+    source_url: str,
+    location_id: str,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+) -> AvailabilityResult:
+    run = AvailabilityRun(
+        run_id,
+        location_id,
+        "airpad_browser",
+        source_url,
+        window_start.isoformat(),
+        window_end.isoformat(),
+        (window_end - window_start).days,
+        collected_at,
+        "unavailable",
+        "public AIRPAD booking page is unavailable",
+    )
+    return AvailabilityResult(run, ())
+
+
+class AirpadBrowserConnector:
+    def __init__(
+        self,
+        sources: Sequence[AirpadSource],
+        *,
+        browser_factory: BrowserFactory = default_browser_factory,
+        timeout_ms: int = _AIRPAD_TIMEOUT_MS,
+    ) -> None:
+        self._sources = {source.location_id: source for source in sources}
+        self._browser_factory = browser_factory
+        self._timeout_ms = timeout_ms
+        self._browser: _AirpadBrowser | None = None
+
+    def open(self) -> None:
+        if self._browser is None:
+            session = self._browser_factory()
+            self._browser = session.__enter__()
+
+    def close(self) -> None:
+        browser = self._browser
+        self._browser = None
+        if browser is not None:
+            browser.__exit__(None, None, None)
+
+    def collect(
+        self,
+        location: LocationRecord,
+        *,
+        run_id: str,
+        window_start: date,
+        window_end: date,
+        collected_at: str,
+    ) -> AvailabilityResult:
+        if window_end <= window_start:
+            raise AirpadSourceError("requested date window is invalid")
+        source = self._sources.get(location.location_id)
+        if source is None:
+            raise AirpadSourceError("no source metadata for location")
+        if source.status == "unavailable":
+            return _unavailable_result(
+                source.booking_url,
+                location.location_id,
+                run_id,
+                window_start,
+                window_end,
+                collected_at,
+            )
+        if location.location_id not in AIRPAD_LOCATION_LABELS:
+            raise AirpadSourceError("location has no AIRPAD booking label")
+
+        observations: list[BrowserSlotObservation] = []
+        try:
+            self.open()
+            browser = self._browser
+            if browser is None:
+                raise AirpadBrowserError("browser session is not running")
+            context = cast(_AirpadContext, browser.new_context())
+            try:
+                page = context.new_page()
+                try:
+                    page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
+                    frame = _airpad_frame(page, self._timeout_ms)
+                    _airpad_visible_locator(frame, ".item-title", text="1.Terrains").click()
+                    _airpad_visible_locator(
+                        frame,
+                        ".activity-card",
+                        text=AIRPAD_LOCATION_LABELS[location.location_id],
+                    ).click()
+                    current_date = window_start
+                    while current_date < window_end:
+                        observations.extend(
+                            _collect_airpad_date(page, frame, current_date, self._timeout_ms)
+                        )
+                        current_date += timedelta(days=1)
+                finally:
+                    page.close()
+            finally:
+                context.close()
+        except (AirpadBrowserError, AirpadSourceError):
+            raise
+        except Exception as error:
+            if isinstance(error, RuntimeError) or _is_documented_browser_error(error):
+                raise AirpadSourceError("browser navigation or extraction failed") from error
+            raise
+
+        slots = parse_airpad_observations(
+            tuple(observations),
+            location_id=location.location_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        run = AvailabilityRun(
+            run_id,
+            location.location_id,
+            "airpad_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            "success",
+            None,
+        )
+        return AvailabilityResult(run, slots)
+
+
+AirpadBrowserConnectorFactory = Callable[[Sequence[AirpadSource]], AirpadBrowserConnector]

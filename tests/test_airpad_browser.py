@@ -6,16 +6,19 @@ from dataclasses import dataclass, field
 from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import pytest
 
+from padel_availability.connectors.airpad import AirpadSource
 from padel_availability.connectors.airpad_browser import (
     _AIRPAD_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
+    AirpadBrowserConnector,
     AirpadBrowserError,
     parse_airpad_dom,
     parse_airpad_observations,
 )
+from padel_availability.models import LocationRecord
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "airpad" / "dom"
 
@@ -359,3 +362,383 @@ def test_airpad_changed_date_rejects_unchanged_dom() -> None:
 def test_airpad_malformed_duration_is_an_error() -> None:
     with pytest.raises(AirpadBrowserError, match="duration"):
         parse_airpad_dom(_fixture_payload("booking-malformed"), date(2026, 9, 22))
+
+
+class _FakeAirpadLocator:
+    def __init__(self, frame: _FakeAirpadFrame, selector: str, text: str | None = None) -> None:
+        self.frame = frame
+        self.selector = selector
+        self.text = text
+
+    def filter(self, *, has_text: str) -> _FakeAirpadLocator:
+        return _FakeAirpadLocator(self.frame, self.selector, has_text)
+
+    def count(self) -> int:
+        return int(self.frame.has_locator(self.selector, self.text))
+
+    def is_visible(self) -> bool:
+        return self.count() == 1
+
+    def click(self) -> None:
+        self.frame.click(self.selector, self.text)
+
+    def all_inner_texts(self) -> list[str]:
+        return self.frame.inner_texts(self.selector)
+
+
+class _FakeAirpadFrame:
+    def __init__(
+        self,
+        url: str,
+        dates: dict[date, list[tuple[str, dict[str, object]]]],
+        initial_date: date,
+        events: list[str],
+        *,
+        programming_error: bool = False,
+    ) -> None:
+        self.url = url
+        self.dates = dates
+        self.current_date = initial_date
+        self.range_index = 0
+        self.events = events
+        self.programming_error = programming_error
+
+    @property
+    def current_range(self) -> tuple[str, dict[str, object]]:
+        return self.dates[self.current_date][self.range_index]
+
+    def locator(self, selector: str) -> _FakeAirpadLocator:
+        return _FakeAirpadLocator(self, selector)
+
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        if expression == _AIRPAD_VISIBLE_DOM_SCRIPT:
+            return dict(self.current_range[1])
+        raise AssertionError(f"unexpected frame evaluation: {expression!r} {arg!r}")
+
+    def has_locator(self, selector: str, text: str | None) -> bool:
+        if selector == ".item-title":
+            return text == "1.Terrains"
+        if selector == ".activity-card":
+            return text == "LA PRAILLE"
+        if selector == ".btn-date-calendar":
+            return True
+        if selector.startswith("button.days-btn"):
+            return True
+        if selector == ".btn-arrow-right":
+            return self.range_index + 1 < len(self.dates[self.current_date])
+        return selector == ".select-time-range"
+
+    def click(self, selector: str, text: str | None) -> None:
+        self.events.append(f"click:{selector}:{text or ''}")
+        if self.programming_error:
+            raise TypeError("test programming error")
+        if selector == ".item-title":
+            return
+        if selector == ".activity-card":
+            return
+        if selector.startswith("button.days-btn"):
+            label = selector.split('aria-label="', 1)[1].split('"', 1)[0]
+            month, day, year = label.replace(",", "").split()
+            self.current_date = date(
+                int(year),
+                {
+                    "January": 1,
+                    "February": 2,
+                    "March": 3,
+                    "April": 4,
+                    "May": 5,
+                    "June": 6,
+                    "July": 7,
+                    "August": 8,
+                    "September": 9,
+                    "October": 10,
+                    "November": 11,
+                    "December": 12,
+                }[month],
+                int(day),
+            )
+            self.range_index = 0
+        elif selector == ".btn-arrow-right":
+            self.range_index += 1
+
+    def inner_texts(self, selector: str) -> list[str]:
+        if selector == ".select-time-range":
+            return [self.current_range[0]]
+        return []
+
+
+class _FakeAirpadPage:
+    def __init__(self, frames: list[_FakeAirpadFrame], events: list[str]) -> None:
+        self.frames = frames
+        self.events = events
+        self.closed = False
+        self.wait_until: str | None = None
+
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
+        del timeout
+        self.wait_until = wait_until
+        self.events.append(f"goto:{url}")
+
+    def wait_for_timeout(self, timeout: int) -> None:
+        self.events.append(f"wait:{timeout}")
+
+    def evaluate(self, expression: str, arg: object = None) -> object:
+        del expression, arg
+        raise AssertionError("page evaluation was not expected")
+
+    def close(self) -> None:
+        self.closed = True
+        self.events.append("page_close")
+
+
+class _FakeAirpadContext:
+    def __init__(self, page: _FakeAirpadPage, events: list[str]) -> None:
+        self.page = page
+        self.events = events
+        self.closed = False
+
+    def new_page(self) -> _FakeAirpadPage:
+        self.events.append("new_page")
+        return self.page
+
+    def close(self) -> None:
+        self.closed = True
+        self.events.append("context_close")
+
+
+class _FakeAirpadBrowser:
+    def __init__(self, contexts: list[_FakeAirpadContext], events: list[str]) -> None:
+        self.contexts = contexts
+        self.events = events
+
+    def __enter__(self) -> Self:
+        self.events.append("browser_enter")
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.events.append("browser_exit")
+
+    def new_context(self) -> _FakeAirpadContext:
+        self.events.append("new_context")
+        return self.contexts.pop(0)
+
+
+def _airpad_location(location_id: str = "airpad-la-praille") -> LocationRecord:
+    return LocationRecord(
+        location_id,
+        "AIRPAD La Praille",
+        "Plan-les-Ouates",
+        (location_id,),
+        "public",
+        "no",
+        "yes",
+        "unknown",
+        "unknown",
+        "no",
+        "to_verify",
+        (),
+        (),
+        (),
+        "",
+        brand="AIRPAD",
+        booking_url="https://www.airpad.ch/reserve",
+        booking_platform="doinsport",
+    )
+
+
+def _airpad_payload(requested_date: date, *, slots: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "view": "booking",
+        "date": requested_date.isoformat(),
+        "slots": slots,
+        "empty_grid": not slots,
+        "empty_rows": [] if slots else ["Terrain 1"],
+        "invalid_rows": False,
+        "visible_text": "AIRPAD booking",
+    }
+
+
+def _airpad_slot(external_id: str, start: str = "09:00") -> dict[str, object]:
+    return {
+        "external_id": external_id,
+        "court": "Terrain 1",
+        "time": start,
+        "duration": "60 min",
+        "class": "available",
+        "disabled": False,
+    }
+
+
+def _airpad_connector(
+    frame: _FakeAirpadFrame,
+    events: list[str],
+) -> tuple[AirpadBrowserConnector, _FakeAirpadPage, _FakeAirpadContext]:
+    page = _FakeAirpadPage([frame], events)
+    context = _FakeAirpadContext(page, events)
+    browser = _FakeAirpadBrowser([context], events)
+    source = AirpadSource(
+        "airpad-la-praille",
+        "https://www.airpad.ch/reserve",
+        "2026-09-22T00:00:00Z",
+        "public",
+    )
+    return AirpadBrowserConnector((source,), browser_factory=lambda: browser), page, context
+
+
+def test_airpad_connector_selects_visible_site_and_closes_context() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    hidden = _FakeAirpadFrame(
+        "https://www.airpad.ch/reserve",
+        {requested: [("09:00", _airpad_payload(requested, slots=[]))]},
+        requested,
+        events,
+    )
+    visible = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {requested: [("09:00", _airpad_payload(requested, slots=[_airpad_slot("slot-1")]))]},
+        requested,
+        events,
+    )
+    page = _FakeAirpadPage([hidden, visible], events)
+    context = _FakeAirpadContext(page, events)
+    browser = _FakeAirpadBrowser([context], events)
+    connector = AirpadBrowserConnector(
+        (AirpadSource("airpad-la-praille", "https://www.airpad.ch/reserve", "2026-09-22T00:00:00Z", "public"),),
+        browser_factory=lambda: browser,
+    )
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert len(result.slots) == 1
+    assert page.closed and context.closed
+    assert events.count("browser_enter") == 1
+    assert events.count("browser_exit") == 1
+    assert events.count("new_context") == 1
+    assert events.count("new_page") == 1
+    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+    assert "click:.activity-card:LA PRAILLE" in events
+
+
+def test_airpad_connector_collects_all_time_ranges_without_duplicates() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {
+            requested: [
+                ("09:00-10:00", _airpad_payload(requested, slots=[_airpad_slot("slot-1")])),
+                (
+                    "10:00-11:00",
+                    _airpad_payload(
+                        requested,
+                        slots=[_airpad_slot("slot-1"), _airpad_slot("slot-2", "10:00")],
+                    ),
+                ),
+            ]
+        },
+        requested,
+        events,
+    )
+    connector, page, _context = _airpad_connector(frame, events)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert len(result.slots) == 2
+    assert events.count("click:.btn-arrow-right:") == 1
+    assert page.closed
+
+
+def test_airpad_connector_accepts_loaded_empty_playground() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {requested: [("09:00", _airpad_payload(requested, slots=[]))]},
+        requested,
+        events,
+    )
+    connector, _page, _context = _airpad_connector(frame, events)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert result.slots == ()
+
+
+def test_airpad_connector_continues_after_date_refresh() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {
+            first: [("09:00", _airpad_payload(first, slots=[_airpad_slot("slot-1")]))],
+            second: [("09:00", _airpad_payload(second, slots=[_airpad_slot("slot-2")]))],
+        },
+        first,
+        events,
+    )
+    connector, _page, _context = _airpad_connector(frame, events)
+
+    result = connector.collect(
+        _airpad_location(),
+        run_id="run-airpad",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert len(result.slots) == 2
+    assert events.count('click:button.days-btn[aria-label="September 22, 2026"]:') == 1
+    assert events.count('click:button.days-btn[aria-label="September 23, 2026"]:') == 1
+
+
+def test_airpad_programming_errors_propagate_and_cleanup() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    frame = _FakeAirpadFrame(
+        "https://airpad.doinsport.club/booking",
+        {requested: [("09:00", _airpad_payload(requested, slots=[]))]},
+        requested,
+        events,
+        programming_error=True,
+    )
+    connector, page, context = _airpad_connector(frame, events)
+
+    with pytest.raises(TypeError, match="programming"):
+        connector.collect(
+            _airpad_location(),
+            run_id="run-airpad",
+            window_start=requested,
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
+    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
