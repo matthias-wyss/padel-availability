@@ -341,6 +341,31 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
     assert observations[-1].ends_at == "2026-09-22T13:30:00+02:00"
 
 
+def test_everness_visible_script_returns_not_ready_payload_without_body(fixture_browser: Any) -> None:
+    context = fixture_browser.new_context()
+    page = context.new_page()
+    try:
+        page.goto("about:blank", wait_until="commit")
+        page.evaluate("document.body.remove()")
+        assert page.evaluate("document.body === null") is True
+
+        payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+    finally:
+        page.close()
+        context.close()
+
+    assert payload == {
+        "view": "unknown",
+        "date_label": "",
+        "courts": [],
+        "rows": [],
+        "grid_fingerprint": "",
+        "loading": True,
+        "authentication_visible": False,
+        "visible_text": "",
+    }
+
+
 def test_everness_visible_script_accepts_live_french_date_and_public_login_link(
     fixture_browser: Any,
 ) -> None:

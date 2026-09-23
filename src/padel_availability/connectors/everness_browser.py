@@ -98,6 +98,18 @@ _EVERNESS_TIMEOUT_MS = 15_000
 _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
 () => {
   const body = document.body;
+  if (!body) {
+    return {
+      view: 'unknown',
+      date_label: '',
+      courts: [],
+      rows: [],
+      grid_fingerprint: '',
+      loading: true,
+      authentication_visible: false,
+      visible_text: ''
+    };
+  }
   const visible = element => {
     if (!element) return false;
     const rect = element.getBoundingClientRect();
