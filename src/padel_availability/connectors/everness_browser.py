@@ -138,7 +138,8 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
       if (!row || !visible(row)) continue;
       const cells = Array.from(row.querySelectorAll('.terrainTxt')).filter(visible).map(cell => ({
         class: cell.getAttribute('class') || '',
-        style: cell.getAttribute('style') || ''
+        style: cell.getAttribute('style') || '',
+        colspan: cell.getAttribute('colspan')
       }));
       rows.push({time: text(hour), cells});
     }
@@ -163,7 +164,7 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
     Array.from(body.querySelectorAll('.loading, [aria-busy="true"]')).some(visible);
   const fingerprintInput = JSON.stringify({
     courts,
-    rows: rows.map(row => [row.time, row.cells.map(cell => [cell.class, cell.style])])
+    rows: rows.map(row => [row.time, row.cells.map(cell => [cell.class, cell.style, cell.colspan])])
   });
   let hash = 2166136261;
   for (let index = 0; index < fingerprintInput.length; index += 1) {
@@ -274,6 +275,22 @@ def _cell_status(value: object) -> Literal["available", "unavailable", "unknown"
     return "unknown"
 
 
+def _cell_span(value: object) -> int:
+    cell = _dom_mapping(value, "visible cell")
+    span = cell.get("colspan")
+    if span is None:
+        return 1
+    if isinstance(span, bool):
+        raise EvernessBrowserError("visible cell has an invalid span")
+    if isinstance(span, int):
+        if span > 0:
+            return span
+        raise EvernessBrowserError("visible cell has an invalid span")
+    if isinstance(span, str) and re.fullmatch(r"[1-9][0-9]*", span):
+        return int(span)
+    raise EvernessBrowserError("visible cell has an invalid span")
+
+
 def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSlotObservation, ...]:
     """Parse the small visible-DOM payload returned by the Everness booking page."""
     dom = _dom_mapping(payload)
@@ -319,9 +336,15 @@ def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSl
         if not isinstance(raw_cells, list):
             raise EvernessBrowserError("visible booking grid has a partial matrix")
         cells = cast(list[object], raw_cells)
-        if len(cells) != len(court_labels):
+        expanded_cells: list[object] = []
+        for cell in cells:
+            span = _cell_span(cell)
+            if len(expanded_cells) + span > len(court_labels):
+                raise EvernessBrowserError("visible booking grid has a partial matrix")
+            expanded_cells.extend([cell] * span)
+        if len(expanded_cells) != len(court_labels):
             raise EvernessBrowserError("visible booking grid has a partial matrix")
-        parsed_rows.append((row_time, cells))
+        parsed_rows.append((row_time, expanded_cells))
 
     if not parsed_rows:
         return ()

@@ -151,6 +151,81 @@ def test_everness_unavailable_and_unknown_states() -> None:
     ]
 
 
+def test_everness_expands_visible_colspan_rows(fixture_browser: Any) -> None:
+    payload = _browser_payload(fixture_browser, "booking-colspan")
+
+    rows = cast(list[dict[str, object]], payload["rows"])
+    assert [
+        [cast(dict[str, object], cell)["colspan"] for cell in cast(list[object], row["cells"])]
+        for row in rows
+    ] == [[None, "2"], [None, "2"]]
+
+    observations = parse_everness_dom(payload, REQUESTED_DATE)
+
+    assert len(observations) == 6
+    assert [observation.court_label for observation in observations] == [
+        "Court 1",
+        "Court 2",
+        "Court 3",
+        "Court 1",
+        "Court 2",
+        "Court 3",
+    ]
+    assert [observation.status for observation in observations] == [
+        "available",
+        "unavailable",
+        "unavailable",
+        "unavailable",
+        "available",
+        "available",
+    ]
+
+
+def test_everness_synthetic_cells_without_colspan_remain_single_span() -> None:
+    observations = parse_everness_dom(
+        _payload([("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "cursor"])]),
+        REQUESTED_DATE,
+    )
+
+    assert len(observations) == 4
+
+
+@pytest.mark.parametrize("span", ["", "0", "-1", "1.5", "two", True, 0, -1])
+def test_everness_rejects_invalid_colspan(span: object) -> None:
+    payload = _payload([("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "cursor"])])
+    cells = cast(list[dict[str, object]], cast(dict[str, object], cast(list[object], payload["rows"])[0])["cells"])
+    cells[0]["colspan"] = span
+
+    with pytest.raises(ValueError, match="span"):
+        parse_everness_dom(payload, REQUESTED_DATE)
+
+
+@pytest.mark.parametrize(
+    ("cells", "courts"),
+    [
+        ([{"class": "cursor", "style": "", "colspan": "2"}], ["Court 1", "Court 2", "Court 3"]),
+        (
+            [
+                {"class": "cursor", "style": "", "colspan": "2"},
+                {"class": "notallowed", "style": "", "colspan": "2"},
+            ],
+            ["Court 1", "Court 2"],
+        ),
+    ],
+)
+def test_everness_rejects_partial_or_overfull_expanded_matrix(
+    cells: list[dict[str, object]], courts: list[str]
+) -> None:
+    payload = _payload(
+        [("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "cursor"])],
+        courts=courts,
+    )
+    cast(dict[str, object], cast(list[object], payload["rows"])[0])["cells"] = cells
+
+    with pytest.raises(ValueError, match="matrix"):
+        parse_everness_dom(payload, REQUESTED_DATE)
+
+
 def test_everness_empty_visible_grid_returns_zero_slots() -> None:
     assert parse_everness_dom(_payload([], courts=["Court 1", "Court 2"]), REQUESTED_DATE) == ()
 
@@ -427,6 +502,17 @@ def test_everness_visible_fingerprint_ignores_date_label(fixture_browser: Any) -
     assert first["date_label"] == "22 Sep 2026"
     assert second["date_label"] == "23 Sep 2026"
     assert first["grid_fingerprint"] == second["grid_fingerprint"]
+
+
+def test_everness_visible_fingerprint_includes_colspan(fixture_browser: Any) -> None:
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    first = _browser_payload_html(fixture_browser, html)
+    second = _browser_payload_html(
+        fixture_browser,
+        html.replace('class="terrainTxt cursor"', 'class="terrainTxt cursor" colspan="2"', 1),
+    )
+
+    assert first["grid_fingerprint"] != second["grid_fingerprint"]
 
 
 def test_everness_body_loading_markers_are_not_final_data(fixture_browser: Any) -> None:
