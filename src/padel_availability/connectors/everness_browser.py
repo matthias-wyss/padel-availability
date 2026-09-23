@@ -627,26 +627,30 @@ def _wait_for_everness_date(
     refresh_observed = False
     stable_fingerprint: str | None = None
     for _ in range(max(1, timeout_ms // 100)):
-        payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
-        _everness_payload_text(payload)
-        loading = _everness_payload_loading(payload)
-        if loading:
-            refresh_observed = True
-        fingerprint = _everness_payload_fingerprint(payload)
-        label = _everness_visible_locator(page, "#multi-language-date").inner_text()
-        label_date = _parse_date_label(label)
-        payload_date = _everness_payload_date(payload)
-        if not loading and label_date == requested_date and payload_date == requested_date:
-            if previous_date == requested_date:
-                return payload
-            if not refresh_observed and fingerprint == previous_fingerprint:
-                stable_fingerprint = None
-            elif stable_fingerprint == fingerprint:
-                return payload
+        try:
+            payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+            _everness_payload_text(payload)
+            loading = _everness_payload_loading(payload)
+            if loading:
+                refresh_observed = True
+            fingerprint = _everness_payload_fingerprint(payload)
+            label = _everness_visible_locator(page, "#multi-language-date").inner_text()
+            label_date = _parse_date_label(label)
+            payload_date = _everness_payload_date(payload)
+            if not loading and label_date == requested_date and payload_date == requested_date:
+                if previous_date == requested_date:
+                    return payload
+                if not refresh_observed and fingerprint == previous_fingerprint:
+                    stable_fingerprint = None
+                elif stable_fingerprint == fingerprint:
+                    return payload
+                else:
+                    stable_fingerprint = fingerprint
             else:
-                stable_fingerprint = fingerprint
-        else:
-            stable_fingerprint = None
+                stable_fingerprint = None
+        except Exception as error:
+            if not _is_documented_browser_error(error):
+                raise
         page.wait_for_timeout(100)
     raise EvernessBrowserError("timed out waiting for requested date and refreshed Everness grid")
 

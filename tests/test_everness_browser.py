@@ -559,6 +559,7 @@ class _FakeEvernessPage:
         events: list[str],
         *,
         programming_error: type[Exception] | None = None,
+        transition_error: Exception | None = None,
         french_datepicker: bool = False,
         jquery_ui_datepicker: bool = False,
         datepicker_hidden: bool = False,
@@ -567,6 +568,9 @@ class _FakeEvernessPage:
         self.current_date = initial_date
         self.events = events
         self.programming_error = programming_error
+        self.transition_error = transition_error
+        self.transition_error_raised = False
+        self.date_transition_started = False
         self.french_datepicker = french_datepicker
         self.jquery_ui_datepicker = jquery_ui_datepicker
         self.datepicker_visible = not datepicker_hidden
@@ -595,6 +599,9 @@ class _FakeEvernessPage:
             raise AssertionError(f"unexpected page evaluation: {expression!r}")
         if self.programming_error is not None:
             raise self.programming_error("test programming error")
+        if self.date_transition_started and self.transition_error is not None and not self.transition_error_raised:
+            self.transition_error_raised = True
+            raise self.transition_error
         return self.payload
 
     def wait_for_timeout(self, timeout: int) -> None:
@@ -666,10 +673,12 @@ class _FakeEvernessPage:
         if selector == '#datepicker td[data-handler="selectDay"]' and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
+            self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         if selector == "#datepicker .day" and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
+            self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         elif selector == "#datepicker .next":
             month = self.current_date.month % 12 + 1
@@ -787,6 +796,7 @@ def _everness_connector(
     *,
     initial_date: date,
     programming_error: type[Exception] | None = None,
+    transition_error: Exception | None = None,
     timeout_ms: int = 15_000,
     french_datepicker: bool = False,
     jquery_ui_datepicker: bool = False,
@@ -797,6 +807,7 @@ def _everness_connector(
         initial_date,
         events,
         programming_error=programming_error,
+        transition_error=transition_error,
         french_datepicker=french_datepicker,
         jquery_ui_datepicker=jquery_ui_datepicker,
         datepicker_hidden=datepicker_hidden,
@@ -963,6 +974,48 @@ def test_everness_connector_supports_jquery_ui_datepicker() -> None:
     assert "click:#datepicker .ui-datepicker-next:" in events
     assert 'click:#datepicker td[data-handler="selectDay"]:21' in events
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
+
+
+def test_everness_connector_retries_playwright_error_during_date_transition() -> None:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError as error:
+        pytest.skip(f"Playwright is unavailable: {error}")
+
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    dates = {
+        first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
+        second: [
+            _everness_payload(
+                second,
+                fingerprint="grid-2",
+                rows=[("09:00", ["cursor"]), ("10:30", ["notallowed"])],
+            )
+        ],
+    }
+    connector, page, _context = _everness_connector(
+        dates,
+        events,
+        initial_date=first,
+        transition_error=PlaywrightError(
+            "Execution context was destroyed, most likely because of a navigation"
+        ),
+    )
+
+    result = connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=second,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert [slot.status for slot in result.slots] == ["available", "unavailable"]
+    assert page.transition_error_raised
 
 
 def test_everness_connector_rejects_stale_grid_without_refresh() -> None:
