@@ -41,6 +41,18 @@ _EVERNESS_MONTHS = {
     "Oct": 10,
     "Nov": 11,
     "Dec": 12,
+    "janv": 1,
+    "févr": 2,
+    "mars": 3,
+    "avr": 4,
+    "mai": 5,
+    "juin": 6,
+    "juil": 7,
+    "août": 8,
+    "sept": 9,
+    "oct": 10,
+    "nov": 11,
+    "déc": 12,
 }
 _EVERNESS_BLOCK_MARKERS = (
     "captcha",
@@ -176,13 +188,20 @@ def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
 
 
 def _parse_date_label(label: str) -> date:
-    match = re.fullmatch(r"([0-9]{1,2}) ([A-Za-z]{3}) ([0-9]{4})", label)
-    if match is None or match.group(2).title() not in _EVERNESS_MONTHS:
+    match = re.fullmatch(r"([0-9]{1,2})\s+([^\W\d_]+\.?)\s+([0-9]{4})", label)
+    if match is None:
+        raise EvernessBrowserError("visible DOM has an invalid date label")
+    month_name = match.group(2).casefold().rstrip(".")
+    month = next(
+        (number for name, number in _EVERNESS_MONTHS.items() if month_name.startswith(name.casefold())),
+        None,
+    )
+    if month is None:
         raise EvernessBrowserError("visible DOM has an invalid date label")
     try:
         return date(
             int(match.group(3)),
-            _EVERNESS_MONTHS[match.group(2).title()],
+            month,
             int(match.group(1)),
         )
     except ValueError as error:
@@ -429,10 +448,10 @@ def _wait_for_everness_page(page: _EvernessPage, timeout_ms: int) -> object:
 
 
 def _datepicker_month(value: str) -> tuple[int, int]:
-    match = re.fullmatch(r"([A-Za-z]+)\s+([0-9]{4})", value.strip())
+    match = re.fullmatch(r"([^\W\d_]+\.?)\s+([0-9]{4})", value.strip())
     if match is None:
         raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
-    month_name = match.group(1).casefold()
+    month_name = match.group(1).casefold().rstrip(".")
     month = next(
         (number for name, number in _EVERNESS_MONTHS.items() if month_name.startswith(name.casefold())),
         None,

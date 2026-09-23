@@ -13,6 +13,8 @@ from padel_availability.connectors.everness_browser import (
     _EVERNESS_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     EvernessBrowserConnector,
     EvernessBrowserError,
+    _datepicker_month,  # pyright: ignore[reportPrivateUsage]
+    _parse_date_label,  # pyright: ignore[reportPrivateUsage]
     parse_everness_dom,
     parse_everness_observations,
 )
@@ -151,6 +153,34 @@ def test_everness_unavailable_and_unknown_states() -> None:
 
 def test_everness_empty_visible_grid_returns_zero_slots() -> None:
     assert parse_everness_dom(_payload([], courts=["Court 1", "Court 2"]), REQUESTED_DATE) == ()
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("23 sept. 2026", date(2026, 9, 23)),
+        ("23 août 2026", date(2026, 8, 23)),
+        ("23 févr. 2026", date(2026, 2, 23)),
+    ],
+)
+def test_everness_accepts_french_date_labels(label: str, expected: date) -> None:
+    assert _parse_date_label(label) == expected
+
+
+@pytest.mark.parametrize("label", ["31 avr. 2026", "23 sept. 2026x", "23 jamais 2026"])
+def test_everness_rejects_invalid_french_date_labels(label: str) -> None:
+    with pytest.raises(EvernessBrowserError, match="invalid date label"):
+        _parse_date_label(label)
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [("septembre 2026", (9, 2026)), ("sept. 2026", (9, 2026)), ("février 2026", (2, 2026))],
+)
+def test_everness_accepts_french_datepicker_month_labels(
+    label: str, expected: tuple[int, int]
+) -> None:
+    assert _datepicker_month(label) == expected
 
 
 def test_everness_loading_page_is_not_final_data() -> None:
@@ -385,11 +415,13 @@ class _FakeEvernessPage:
         events: list[str],
         *,
         programming_error: type[Exception] | None = None,
+        french_datepicker: bool = False,
     ) -> None:
         self.dates = dates
         self.current_date = initial_date
         self.events = events
         self.programming_error = programming_error
+        self.french_datepicker = french_datepicker
         self.pending: list[dict[str, object]] = []
         self.closed = False
         self.wait_ticks = 0
@@ -436,6 +468,8 @@ class _FakeEvernessPage:
         if selector == "#multi-language-date":
             return str(self.dates[self.current_date][-1]["date_label"])
         if selector == "#datepicker .datepicker-switch":
+            if self.french_datepicker:
+                return ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")[self.current_date.month - 1] + f" {self.current_date.year}"
             return self.current_date.strftime("%B %Y")
         if selector == "#datepicker .day" and index is not None:
             return str(index + 1)
@@ -561,8 +595,15 @@ def _everness_connector(
     initial_date: date,
     programming_error: type[Exception] | None = None,
     timeout_ms: int = 15_000,
+    french_datepicker: bool = False,
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
-    page = _FakeEvernessPage(dates, initial_date, events, programming_error=programming_error)
+    page = _FakeEvernessPage(
+        dates,
+        initial_date,
+        events,
+        programming_error=programming_error,
+        french_datepicker=french_datepicker,
+    )
     context = _FakeEvernessContext(page, events)
     browser = _FakeEvernessBrowser(context, events)
     source = EvernessSource(
@@ -635,6 +676,36 @@ def test_everness_connector_selects_each_requested_date() -> None:
     assert "click:#datepicker .day:21" in events
     assert "click:#datepicker .day:22" in events
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
+
+
+def test_everness_connector_accepts_french_visible_dates_and_datepicker() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    dates = {
+        first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
+        second: [
+            {
+                **_everness_payload(second, fingerprint="grid-2", rows=[]),
+                "date_label": "23 sept. 2026",
+            }
+        ],
+    }
+    dates[first][0]["date_label"] = "22 sept. 2026"
+    connector, _page, _context = _everness_connector(
+        dates, events, initial_date=first, french_datepicker=True
+    )
+
+    connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert "click:#datepicker .day:22" in events
 
 
 def test_everness_connector_rejects_stale_grid_without_refresh() -> None:
