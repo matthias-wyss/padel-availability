@@ -482,6 +482,28 @@ def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) ->
     assert [observation.status for observation in observations] == ["available", "unavailable"]
 
 
+def test_everness_visible_script_ignores_hidden_descendant_text(fixture_browser: Any) -> None:
+    payload = _browser_payload(fixture_browser, "booking-hidden-descendants")
+
+    assert payload["date_label"] == "22 Sep 2026"
+    assert payload["courts"] == ["Court 1", ""]
+    rows = cast(list[dict[str, object]], payload["rows"])
+    assert [row["time"] for row in rows] == ["09:00", ""]
+    assert [row["cells"] for row in rows] == [
+        [
+            {"class": "terrainTxt cursor", "style": "", "colspan": None},
+            {"class": "terrainTxt notallowed", "style": "", "colspan": None},
+        ],
+        [
+            {"class": "terrainTxt notallowed", "style": "", "colspan": None},
+            {"class": "terrainTxt cursor", "style": "", "colspan": None},
+        ],
+    ]
+    assert "Hidden" not in repr(payload)
+    with pytest.raises(EvernessBrowserError, match="missing court labels"):
+        parse_everness_dom(payload, REQUESTED_DATE)
+
+
 def test_everness_visible_script_detects_auth_overlay(fixture_browser: Any) -> None:
     payload = _browser_payload(fixture_browser, "booking-auth")
 

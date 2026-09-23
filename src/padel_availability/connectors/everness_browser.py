@@ -140,7 +140,7 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
     }
     return true;
   };
-  const text = element => (element.innerText || element.textContent || '').trim();
+  const text = element => (element.innerText || '').trim();
   const dateElement = document.querySelector('#multi-language-date');
   const table = document.querySelector('#table_reservation');
   const dateLabel = dateElement && visible(dateElement) ? text(dateElement) : '';
