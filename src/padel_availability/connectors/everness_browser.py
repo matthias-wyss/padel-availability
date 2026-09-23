@@ -29,30 +29,47 @@ __all__ = [
 
 _EVERNESS_ZURICH = ZoneInfo("Europe/Zurich")
 _EVERNESS_MONTHS = {
-    "Jan": 1,
-    "Feb": 2,
-    "Mar": 3,
-    "Apr": 4,
-    "May": 5,
-    "Jun": 6,
-    "Jul": 7,
-    "Aug": 8,
-    "Sep": 9,
-    "Oct": 10,
-    "Nov": 11,
-    "Dec": 12,
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
     "janv": 1,
+    "janvier": 1,
     "févr": 2,
+    "février": 2,
     "mars": 3,
     "avr": 4,
+    "avril": 4,
     "mai": 5,
     "juin": 6,
     "juil": 7,
+    "juillet": 7,
     "août": 8,
     "sept": 9,
-    "oct": 10,
-    "nov": 11,
+    "septembre": 9,
+    "octobre": 10,
+    "novembre": 11,
     "déc": 12,
+    "décembre": 12,
 }
 _EVERNESS_WEEKDAYS = {
     "monday": 0,
@@ -230,10 +247,7 @@ def _parse_date_label(label: str) -> date:
     if match is None:
         raise EvernessBrowserError("visible DOM has an invalid date label")
     month_name = match.group(2).casefold().rstrip(".")
-    month = next(
-        (number for name, number in _EVERNESS_MONTHS.items() if month_name.startswith(name.casefold())),
-        None,
-    )
+    month = _EVERNESS_MONTHS.get(month_name)
     if month is None:
         raise EvernessBrowserError("visible DOM has an invalid date label")
     try:
@@ -517,13 +531,29 @@ def _datepicker_month(value: str) -> tuple[int, int]:
     if match is None:
         raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
     month_name = match.group(1).casefold().rstrip(".")
-    month = next(
-        (number for name, number in _EVERNESS_MONTHS.items() if month_name.startswith(name.casefold())),
-        None,
-    )
+    month = _EVERNESS_MONTHS.get(month_name)
     if month is None:
         raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
-    return month, int(match.group(2))
+    year = int(match.group(2))
+    if not 1 <= year <= 9999:
+        raise EvernessBrowserError("visible Everness datepicker has an invalid month label")
+    return month, year
+
+
+def _datepicker_selected_month_year(month_value: str, year_value: str) -> date:
+    if re.fullmatch(r"[0-9]+", month_value) is None or re.fullmatch(
+        r"[0-9]+", year_value
+    ) is None:
+        raise EvernessBrowserError(
+            "visible Everness datepicker has invalid selected month or year"
+        )
+    month_index = int(month_value)
+    year = int(year_value)
+    if not 0 <= month_index <= 11 or not 1 <= year <= 9999:
+        raise EvernessBrowserError(
+            "visible Everness datepicker has invalid selected month or year"
+        )
+    return date(year, month_index + 1, 1)
 
 
 def _select_everness_date(
@@ -555,8 +585,8 @@ def _select_everness_date(
         month_value = selected_value(month_select)
         year_value = selected_value(year_select)
         try:
-            current = date(int(year_value), int(month_value) + 1, 1)
-        except (TypeError, ValueError) as error:
+            current = _datepicker_selected_month_year(month_value, year_value)
+        except (TypeError, ValueError, EvernessBrowserError) as error:
             raise EvernessBrowserError(
                 "visible Everness datepicker has invalid selected month or year"
             ) from error
@@ -583,8 +613,8 @@ def _select_everness_date(
             month_value = selected_value(month_select)
             year_value = selected_value(year_select)
             try:
-                current = date(int(year_value), int(month_value) + 1, 1)
-            except (TypeError, ValueError) as error:
+                current = _datepicker_selected_month_year(month_value, year_value)
+            except (TypeError, ValueError, EvernessBrowserError) as error:
                 raise EvernessBrowserError(
                     "visible Everness datepicker has invalid selected month or year"
                 ) from error
@@ -616,6 +646,17 @@ def _select_everness_date(
     raise EvernessBrowserError("visible Everness datepicker could not reach requested date")
 
 
+def _is_everness_transition_error(error: Exception) -> bool:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError:
+        return False
+    message = " ".join(str(error).split()).casefold()
+    return isinstance(error, PlaywrightError) and (
+        "execution context was destroyed" in message and "navigation" in message
+    )
+
+
 def _wait_for_everness_date(
     page: _EvernessPage,
     requested_date: date,
@@ -638,9 +679,11 @@ def _wait_for_everness_date(
             label_date = _parse_date_label(label)
             payload_date = _everness_payload_date(payload)
             if not loading and label_date == requested_date and payload_date == requested_date:
-                if previous_date == requested_date:
-                    return payload
-                if not refresh_observed and fingerprint == previous_fingerprint:
+                if (
+                    previous_date != requested_date
+                    and not refresh_observed
+                    and fingerprint == previous_fingerprint
+                ):
                     stable_fingerprint = None
                 elif stable_fingerprint == fingerprint:
                     return payload
@@ -649,7 +692,7 @@ def _wait_for_everness_date(
             else:
                 stable_fingerprint = None
         except Exception as error:
-            if not _is_documented_browser_error(error):
+            if not _is_everness_transition_error(error):
                 raise
         page.wait_for_timeout(100)
     raise EvernessBrowserError("timed out waiting for requested date and refreshed Everness grid")

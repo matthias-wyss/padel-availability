@@ -245,7 +245,15 @@ def test_everness_accepts_french_date_labels(label: str, expected: date) -> None
 
 @pytest.mark.parametrize(
     "label",
-    ["31 avr. 2026", "23 sept. 2026x", "23 jamais 2026", "23 sept. 2026\nNotaday"],
+    [
+        "31 avr. 2026",
+        "23 sept. 2026x",
+        "23 septfoobar 2026",
+        "23 sept.. 2026",
+        "23 jamais 2026",
+        "23 sept. 2026\nNotaday",
+        "23 sept. 2026\nMercredis",
+    ],
 )
 def test_everness_rejects_invalid_french_date_labels(label: str) -> None:
     with pytest.raises(EvernessBrowserError, match="invalid date label"):
@@ -260,6 +268,12 @@ def test_everness_accepts_french_datepicker_month_labels(
     label: str, expected: tuple[int, int]
 ) -> None:
     assert _datepicker_month(label) == expected
+
+
+@pytest.mark.parametrize("label", ["September 0000", "September 10000", "September nope"])
+def test_everness_rejects_invalid_datepicker_month_year(label: str) -> None:
+    with pytest.raises(EvernessBrowserError, match="invalid month label"):
+        _datepicker_month(label)
 
 
 def test_everness_loading_page_is_not_final_data() -> None:
@@ -563,6 +577,10 @@ class _FakeEvernessPage:
         french_datepicker: bool = False,
         jquery_ui_datepicker: bool = False,
         datepicker_hidden: bool = False,
+        initial_payloads: list[dict[str, object]] | None = None,
+        jquery_month_value: str | None = None,
+        jquery_year_value: str | None = None,
+        bootstrap_month_label: str | None = None,
     ) -> None:
         self.dates = dates
         self.current_date = initial_date
@@ -574,7 +592,10 @@ class _FakeEvernessPage:
         self.french_datepicker = french_datepicker
         self.jquery_ui_datepicker = jquery_ui_datepicker
         self.datepicker_visible = not datepicker_hidden
-        self.pending: list[dict[str, object]] = []
+        self.pending = list(initial_payloads or [])
+        self.jquery_month_value = jquery_month_value
+        self.jquery_year_value = jquery_year_value
+        self.bootstrap_month_label = bootstrap_month_label
         self.closed = False
         self.wait_ticks = 0
         self.wait_until: str | None = None
@@ -643,6 +664,8 @@ class _FakeEvernessPage:
         if selector == '#datepicker td[data-handler="selectDay"]' and index is not None:
             return str(index + 1)
         if selector == "#datepicker .datepicker-switch":
+            if self.bootstrap_month_label is not None:
+                return self.bootstrap_month_label
             if self.french_datepicker:
                 return ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")[self.current_date.month - 1] + f" {self.current_date.year}"
             return self.current_date.strftime("%B %Y")
@@ -653,9 +676,9 @@ class _FakeEvernessPage:
     def locator_attribute(self, selector: str, index: int | None, name: str) -> str | None:
         if self.jquery_ui_datepicker and name == "value":
             if selector == "#datepicker .ui-datepicker-month option:checked":
-                return str(self.current_date.month - 1)
+                return self.jquery_month_value or str(self.current_date.month - 1)
             if selector == "#datepicker .ui-datepicker-year option:checked":
-                return str(self.current_date.year)
+                return self.jquery_year_value or str(self.current_date.year)
         if self.jquery_ui_datepicker and selector == '#datepicker td[data-handler="selectDay"]':
             if name == "data-month":
                 return str(self.current_date.month - 1)
@@ -801,6 +824,10 @@ def _everness_connector(
     french_datepicker: bool = False,
     jquery_ui_datepicker: bool = False,
     datepicker_hidden: bool = False,
+    initial_payloads: list[dict[str, object]] | None = None,
+    jquery_month_value: str | None = None,
+    jquery_year_value: str | None = None,
+    bootstrap_month_label: str | None = None,
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
     page = _FakeEvernessPage(
         dates,
@@ -811,6 +838,10 @@ def _everness_connector(
         french_datepicker=french_datepicker,
         jquery_ui_datepicker=jquery_ui_datepicker,
         datepicker_hidden=datepicker_hidden,
+        initial_payloads=initial_payloads,
+        jquery_month_value=jquery_month_value,
+        jquery_year_value=jquery_year_value,
+        bootstrap_month_label=bootstrap_month_label,
     )
     context = _FakeEvernessContext(page, events)
     browser = _FakeEvernessBrowser(context, events)
@@ -976,6 +1007,63 @@ def test_everness_connector_supports_jquery_ui_datepicker() -> None:
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 
+@pytest.mark.parametrize(
+    ("jquery_month_value", "jquery_year_value"),
+    [("foo", "2026"), ("8", "0000"), ("8", "10000")],
+)
+def test_everness_connector_rejects_invalid_jquery_ui_selected_month_or_year(
+    jquery_month_value: str, jquery_year_value: str
+) -> None:
+    events: list[str] = []
+    initial = date(2026, 8, 1)
+    requested = date(2026, 9, 22)
+    payload = _everness_payload(initial, fingerprint="initial", rows=[])
+    connector, page, context = _everness_connector(
+        {initial: [payload], requested: [_everness_payload(requested, fingerprint="requested", rows=[])]},
+        events,
+        initial_date=initial,
+        jquery_ui_datepicker=True,
+        jquery_month_value=jquery_month_value,
+        jquery_year_value=jquery_year_value,
+    )
+
+    with pytest.raises(EvernessBrowserError, match="invalid selected month or year"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=requested,
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
+
+
+def test_everness_connector_rejects_invalid_bootstrap_month_year_before_date() -> None:
+    events: list[str] = []
+    initial = date(2026, 8, 1)
+    requested = date(2026, 9, 22)
+    connector, page, context = _everness_connector(
+        {initial: [_everness_payload(initial, fingerprint="initial", rows=[])]},
+        events,
+        initial_date=initial,
+        bootstrap_month_label="September 0000",
+    )
+
+    with pytest.raises(EvernessBrowserError, match="invalid month label"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=requested,
+            window_end=date(2026, 9, 23),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.closed and context.closed
+
+
 def test_everness_connector_retries_playwright_error_during_date_transition() -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -1016,6 +1104,40 @@ def test_everness_connector_retries_playwright_error_during_date_transition() ->
     assert result.run.status == "success"
     assert [slot.status for slot in result.slots] == ["available", "unavailable"]
     assert page.transition_error_raised
+
+
+def test_everness_connector_does_not_retry_generic_playwright_error() -> None:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError as error:
+        pytest.skip(f"Playwright is unavailable: {error}")
+
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    dates = {
+        first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
+        second: [_everness_payload(second, fingerprint="grid-2", rows=[])],
+    }
+    connector, page, _context = _everness_connector(
+        dates,
+        events,
+        initial_date=first,
+        transition_error=PlaywrightError("Target page, context or browser has been closed"),
+    )
+
+    with pytest.raises(EvernessSourceError, match="browser navigation or extraction failed"):
+        connector.collect(
+            _everness_location(),
+            run_id="run-everness",
+            window_start=second,
+            window_end=date(2026, 9, 24),
+            collected_at="2026-09-22T07:00:00Z",
+        )
+    connector.close()
+
+    assert page.transition_error_raised
+    assert page.wait_ticks == 0
 
 
 def test_everness_connector_rejects_stale_grid_without_refresh() -> None:
@@ -1062,7 +1184,7 @@ def test_everness_connector_rejects_stale_real_script_grid(
         {first: [first_payload], second: [second_payload]},
         events,
         initial_date=first,
-        timeout_ms=100,
+        timeout_ms=200,
     )
 
     with pytest.raises(EvernessBrowserError, match="requested date"):
@@ -1139,6 +1261,39 @@ def test_everness_connector_waits_for_final_stable_grid_after_transient_valid_gr
     assert [slot.status for slot in result.slots] == ["unavailable", "available"]
 
 
+def test_everness_connector_waits_for_initial_final_stable_grid() -> None:
+    events: list[str] = []
+    requested = date(2026, 9, 22)
+    baseline = _everness_payload(requested, fingerprint="initial", rows=[])
+    transient = _everness_payload(
+        requested,
+        fingerprint="transient",
+        rows=[("09:00", ["cursor"]), ("10:30", ["cursor"])],
+    )
+    final = _everness_payload(
+        requested,
+        fingerprint="final",
+        rows=[("09:00", ["notallowed"]), ("10:30", ["cursor"])],
+    )
+    connector, _page, _context = _everness_connector(
+        {requested: [final]},
+        events,
+        initial_date=requested,
+        initial_payloads=[baseline, baseline, transient, final],
+    )
+
+    result = connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert [slot.status for slot in result.slots] == ["unavailable", "available"]
+
+
 def test_everness_connector_resets_stability_after_non_requested_payload() -> None:
     events: list[str] = []
     first = date(2026, 9, 22)
@@ -1166,7 +1321,7 @@ def test_everness_connector_resets_stability_after_non_requested_payload() -> No
         )
     connector.close()
 
-    assert page.wait_ticks == 3
+    assert page.wait_ticks == 4
     assert page.closed and context.closed
 
 
