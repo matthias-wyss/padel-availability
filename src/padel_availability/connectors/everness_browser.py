@@ -54,16 +54,37 @@ _EVERNESS_MONTHS = {
     "nov": 11,
     "déc": 12,
 }
+_EVERNESS_WEEKDAYS = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+    "lundi": 0,
+    "mardi": 1,
+    "mercredi": 2,
+    "jeudi": 3,
+    "vendredi": 4,
+    "samedi": 5,
+    "dimanche": 6,
+}
 _EVERNESS_BLOCK_MARKERS = (
     "captcha",
-    "log in",
-    "login",
-    "sign in",
-    "sign-in",
-    "authenticate",
+    "log in to continue",
+    "login required",
+    "login-required",
+    "login to continue",
+    "sign in required",
+    "sign-in required",
+    "sign in to continue",
+    "sign-in to continue",
+    "authenticate to continue",
     "authentication required",
-    "connexion",
-    "se connecter",
+    "connexion requise",
+    "connexion nécessaire",
+    "se connecter pour continuer",
     "access denied",
     "accès refusé",
 )
@@ -112,15 +133,16 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
   }
   const visibleText = body.innerText || '';
   const normalizedText = visibleText.replace(/\s+/g, ' ').trim().toLowerCase();
-  const authenticationMarker = /captcha|log[\s-]?in|login|sign[\s-]?in|authenticate|authentication required|connexion|se connecter|access denied|accès refusé/i;
+  const authenticationMarker = /captcha|log[\s-]+in(?:\s+(?:required|to continue))|login(?:[-\s]+(?:required|to continue))|sign[\s-]+in(?:[-\s]+(?:required|to continue))|authenticate(?:\s+(?:required|to continue))|authentication\s+required|connexion\s+(?:requise|nécessaire|required)|se connecter\s+pour continuer|access denied|accès refusé/i;
+  const authenticationContainerMarker = /auth|login|signin|sign-in|connexion/i;
   const authenticationVisible = authenticationMarker.test(normalizedText) ||
     Array.from(body.querySelectorAll(
-      'input[type="password"], form, dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], [class*="auth"], [class*="login"], [class*="signin"], [class*="sign-in"], [class*="connexion"], [class*="overlay"]'
+      'input[type="password"], form, dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], [class*="overlay"], [class*="modal"]'
     )).some(element => {
       if (!visible(element)) return false;
       const attributes = `${element.id || ''} ${String(element.className || '')}`;
       return element.matches('input[type="password"]') ||
-        authenticationMarker.test(text(element)) || authenticationMarker.test(attributes);
+        authenticationMarker.test(text(element)) || authenticationContainerMarker.test(attributes);
     });
   const bodyLoading = visible(body) &&
     (body.classList.contains('loading') || body.getAttribute('aria-busy') === 'true');
@@ -188,7 +210,10 @@ def _local_datetime(local_date: date, local_time: time, field: str) -> datetime:
 
 
 def _parse_date_label(label: str) -> date:
-    match = re.fullmatch(r"([0-9]{1,2})\s+([^\W\d_]+\.?)\s+([0-9]{4})", label)
+    match = re.fullmatch(
+        r"([0-9]{1,2})\s+([^\W\d_]+\.?)\s+([0-9]{4})(?:\s+([^\W\d_]+\.?))?",
+        label,
+    )
     if match is None:
         raise EvernessBrowserError("visible DOM has an invalid date label")
     month_name = match.group(2).casefold().rstrip(".")
@@ -199,13 +224,19 @@ def _parse_date_label(label: str) -> date:
     if month is None:
         raise EvernessBrowserError("visible DOM has an invalid date label")
     try:
-        return date(
+        parsed = date(
             int(match.group(3)),
             month,
             int(match.group(1)),
         )
     except ValueError as error:
         raise EvernessBrowserError("visible DOM has an invalid date label") from error
+    weekday = match.group(4)
+    if weekday is not None:
+        weekday_number = _EVERNESS_WEEKDAYS.get(weekday.casefold().rstrip("."))
+        if weekday_number is None or weekday_number != parsed.weekday():
+            raise EvernessBrowserError("visible DOM has an invalid date label")
+    return parsed
 
 
 def _parse_row_time(value: object) -> time:
@@ -465,6 +496,62 @@ def _select_everness_date(
     page: _EvernessPage, requested_date: date, timeout_ms: int
 ) -> None:
     datepicker = _wait_for_everness_locator(page, "#datepicker", timeout_ms)
+    jquery_title = datepicker.locator(".ui-datepicker-title")
+    if jquery_title.count() == 1 and jquery_title.is_visible():
+        month_select = _everness_visible_locator(datepicker, ".ui-datepicker-month")
+        year_select = _everness_visible_locator(datepicker, ".ui-datepicker-year")
+
+        def selected_value(select: _EvernessLocator) -> str:
+            selected = select.locator("option:checked")
+            if selected.count() != 1:
+                raise EvernessBrowserError(
+                    "visible Everness datepicker has an invalid selected month or year"
+                )
+            value = selected.get_attribute("value")
+            if value is None:
+                raise EvernessBrowserError(
+                    "visible Everness datepicker has an invalid selected month or year"
+                )
+            return value
+
+        month_value = selected_value(month_select)
+        year_value = selected_value(year_select)
+        try:
+            current = date(int(year_value), int(month_value) + 1, 1)
+        except (TypeError, ValueError) as error:
+            raise EvernessBrowserError(
+                "visible Everness datepicker has invalid selected month or year"
+            ) from error
+        target = date(requested_date.year, requested_date.month, 1)
+        for _ in range(24):
+            if current == target:
+                days = datepicker.locator('td[data-handler="selectDay"]')
+                matches: list[_EvernessLocator] = []
+                for index in range(days.count()):
+                    day = days.nth(index)
+                    if (
+                        day.is_visible()
+                        and day.get_attribute("data-month") == str(requested_date.month - 1)
+                        and day.get_attribute("data-year") == str(requested_date.year)
+                        and day.inner_text().strip() == str(requested_date.day)
+                    ):
+                        matches.append(day)
+                if len(matches) != 1:
+                    raise EvernessBrowserError("visible Everness date control was ambiguous")
+                matches[0].click()
+                return
+            selector = ".ui-datepicker-next" if current < target else ".ui-datepicker-prev"
+            _everness_visible_locator(datepicker, selector).click()
+            month_value = selected_value(month_select)
+            year_value = selected_value(year_select)
+            try:
+                current = date(int(year_value), int(month_value) + 1, 1)
+            except (TypeError, ValueError) as error:
+                raise EvernessBrowserError(
+                    "visible Everness datepicker has invalid selected month or year"
+                ) from error
+        raise EvernessBrowserError("visible Everness datepicker could not reach requested date")
+
     for _ in range(24):
         switch = _everness_visible_locator(datepicker, ".datepicker-switch")
         month, year = _datepicker_month(switch.inner_text())

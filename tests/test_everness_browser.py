@@ -159,6 +159,7 @@ def test_everness_empty_visible_grid_returns_zero_slots() -> None:
     ("label", "expected"),
     [
         ("23 sept. 2026", date(2026, 9, 23)),
+        ("23 sept. 2026\nMercredi", date(2026, 9, 23)),
         ("23 août 2026", date(2026, 8, 23)),
         ("23 févr. 2026", date(2026, 2, 23)),
     ],
@@ -167,7 +168,10 @@ def test_everness_accepts_french_date_labels(label: str, expected: date) -> None
     assert _parse_date_label(label) == expected
 
 
-@pytest.mark.parametrize("label", ["31 avr. 2026", "23 sept. 2026x", "23 jamais 2026"])
+@pytest.mark.parametrize(
+    "label",
+    ["31 avr. 2026", "23 sept. 2026x", "23 jamais 2026", "23 sept. 2026\nNotaday"],
+)
 def test_everness_rejects_invalid_french_date_labels(label: str) -> None:
     with pytest.raises(EvernessBrowserError, match="invalid date label"):
         _parse_date_label(label)
@@ -204,6 +208,19 @@ def test_everness_loading_page_is_not_final_data() -> None:
 def test_everness_login_or_captcha_is_bounded_error(marker: str) -> None:
     with pytest.raises(ValueError, match="blocked"):
         parse_everness_dom(_payload([], visible_text=marker), REQUESTED_DATE)
+
+
+def test_everness_public_generic_login_link_is_not_blocked() -> None:
+    requested = date(2026, 9, 23)
+
+    assert parse_everness_dom(
+        _payload(
+            [],
+            date_label="23 sept. 2026\nMercredi",
+            visible_text="Everness booking\nSE CONNECTER\nConnexion",
+        ),
+        requested,
+    ) == ()
 
 
 @pytest.mark.parametrize(
@@ -324,6 +341,22 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
     assert observations[-1].ends_at == "2026-09-22T13:30:00+02:00"
 
 
+def test_everness_visible_script_accepts_live_french_date_and_public_login_link(
+    fixture_browser: Any,
+) -> None:
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    html = html.replace(
+        "22 Sep 2026",
+        "23 sept. 2026<br>Mercredi",
+    ).replace("</main>", "<nav><a>SE CONNECTER</a><a>Connexion</a></nav></main>")
+
+    payload = _browser_payload_html(fixture_browser, html)
+
+    assert payload["date_label"] == "23 sept. 2026\nMercredi"
+    assert payload["authentication_visible"] is False
+    assert parse_everness_dom(payload, date(2026, 9, 23))
+
+
 def test_everness_visible_script_filters_hidden_fixture(fixture_browser: Any) -> None:
     payload = _browser_payload(fixture_browser, "booking-hidden")
 
@@ -416,12 +449,14 @@ class _FakeEvernessPage:
         *,
         programming_error: type[Exception] | None = None,
         french_datepicker: bool = False,
+        jquery_ui_datepicker: bool = False,
     ) -> None:
         self.dates = dates
         self.current_date = initial_date
         self.events = events
         self.programming_error = programming_error
         self.french_datepicker = french_datepicker
+        self.jquery_ui_datepicker = jquery_ui_datepicker
         self.pending: list[dict[str, object]] = []
         self.closed = False
         self.wait_ticks = 0
@@ -456,6 +491,17 @@ class _FakeEvernessPage:
     def locator_count(self, selector: str) -> int:
         if selector in {"#table_reservation", "#datepicker", "#multi-language-date"}:
             return 1
+        if self.jquery_ui_datepicker and selector in {
+            "#datepicker .ui-datepicker-title",
+            "#datepicker .ui-datepicker-month",
+            "#datepicker .ui-datepicker-year",
+            "#datepicker .ui-datepicker-month option:checked",
+            "#datepicker .ui-datepicker-year option:checked",
+            '#datepicker td[data-handler="selectDay"]',
+            "#datepicker .ui-datepicker-next",
+            "#datepicker .ui-datepicker-prev",
+        }:
+            return 31 if "selectDay" in selector else 1
         if selector == "#datepicker .day":
             return 31
         if selector == "#datepicker .datepicker-switch":
@@ -467,6 +513,10 @@ class _FakeEvernessPage:
     def locator_text(self, selector: str, index: int | None) -> str:
         if selector == "#multi-language-date":
             return str(self.dates[self.current_date][-1]["date_label"])
+        if selector == "#datepicker .ui-datepicker-title":
+            return self.current_date.strftime("%B %Y")
+        if selector == '#datepicker td[data-handler="selectDay"]' and index is not None:
+            return str(index + 1)
         if selector == "#datepicker .datepicker-switch":
             if self.french_datepicker:
                 return ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")[self.current_date.month - 1] + f" {self.current_date.year}"
@@ -476,12 +526,26 @@ class _FakeEvernessPage:
         return ""
 
     def locator_attribute(self, selector: str, index: int | None, name: str) -> str | None:
+        if self.jquery_ui_datepicker and name == "value":
+            if selector == "#datepicker .ui-datepicker-month option:checked":
+                return str(self.current_date.month - 1)
+            if selector == "#datepicker .ui-datepicker-year option:checked":
+                return str(self.current_date.year)
+        if self.jquery_ui_datepicker and selector == '#datepicker td[data-handler="selectDay"]':
+            if name == "data-month":
+                return str(self.current_date.month - 1)
+            if name == "data-year":
+                return str(self.current_date.year)
         if selector == "#datepicker .day" and index is not None and name == "class":
             return "day"
         return None
 
     def click(self, selector: str, index: int | None) -> None:
         self.events.append(f"click:{selector}:{index if index is not None else ''}")
+        if selector == '#datepicker td[data-handler="selectDay"]' and index is not None:
+            selected = date(self.current_date.year, self.current_date.month, index + 1)
+            self.current_date = selected
+            self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         if selector == "#datepicker .day" and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
@@ -491,6 +555,14 @@ class _FakeEvernessPage:
             year = self.current_date.year + (self.current_date.month == 12)
             self.current_date = date(year, month, 1)
         elif selector == "#datepicker .prev":
+            month = self.current_date.month - 1 or 12
+            year = self.current_date.year - (self.current_date.month == 1)
+            self.current_date = date(year, month, 1)
+        elif selector == "#datepicker .ui-datepicker-next":
+            month = self.current_date.month % 12 + 1
+            year = self.current_date.year + (self.current_date.month == 12)
+            self.current_date = date(year, month, 1)
+        elif selector == "#datepicker .ui-datepicker-prev":
             month = self.current_date.month - 1 or 12
             year = self.current_date.year - (self.current_date.month == 1)
             self.current_date = date(year, month, 1)
@@ -596,6 +668,7 @@ def _everness_connector(
     programming_error: type[Exception] | None = None,
     timeout_ms: int = 15_000,
     french_datepicker: bool = False,
+    jquery_ui_datepicker: bool = False,
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
     page = _FakeEvernessPage(
         dates,
@@ -603,6 +676,7 @@ def _everness_connector(
         events,
         programming_error=programming_error,
         french_datepicker=french_datepicker,
+        jquery_ui_datepicker=jquery_ui_datepicker,
     )
     context = _FakeEvernessContext(page, events)
     browser = _FakeEvernessBrowser(context, events)
@@ -706,6 +780,35 @@ def test_everness_connector_accepts_french_visible_dates_and_datepicker() -> Non
     connector.close()
 
     assert "click:#datepicker .day:22" in events
+
+
+def test_everness_connector_supports_jquery_ui_datepicker() -> None:
+    events: list[str] = []
+    initial = date(2026, 8, 1)
+    requested = date(2026, 9, 22)
+    dates = {
+        initial: [_everness_payload(initial, fingerprint="initial", rows=[])],
+        requested: [_everness_payload(requested, fingerprint="requested", rows=[])],
+    }
+    connector, _page, _context = _everness_connector(
+        dates,
+        events,
+        initial_date=initial,
+        jquery_ui_datepicker=True,
+    )
+
+    connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=requested,
+        window_end=date(2026, 9, 23),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert "click:#datepicker .ui-datepicker-next:" in events
+    assert 'click:#datepicker td[data-handler="selectDay"]:21' in events
+    assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 
 def test_everness_connector_rejects_stale_grid_without_refresh() -> None:
