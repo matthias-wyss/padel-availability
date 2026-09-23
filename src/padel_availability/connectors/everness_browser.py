@@ -481,7 +481,6 @@ def _wait_for_everness_page(page: _EvernessPage, timeout_ms: int) -> object:
             page.locator("#table_reservation").count() == 1
             and page.locator("#table_reservation").is_visible()
             and page.locator("#datepicker").count() == 1
-            and page.locator("#datepicker").is_visible()
             and page.locator("#multi-language-date").count() == 1
             and page.locator("#multi-language-date").is_visible()
         ):
@@ -507,6 +506,10 @@ def _datepicker_month(value: str) -> tuple[int, int]:
 def _select_everness_date(
     page: _EvernessPage, requested_date: date, timeout_ms: int
 ) -> None:
+    date_control = _everness_visible_locator(page, "#multi-language-date")
+    if _parse_date_label(date_control.inner_text()) == requested_date:
+        return
+    date_control.click()
     datepicker = _wait_for_everness_locator(page, "#datepicker", timeout_ms)
     jquery_title = datepicker.locator(".ui-datepicker-title")
     if jquery_title.count() == 1 and jquery_title.is_visible():
