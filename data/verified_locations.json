@@ -159,17 +159,19 @@
         {"url": "https://padelhike.ch/en/clubs/l-asphalte", "source_type": "regional_directory", "title": "L'Asphalte · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory independently lists two covered doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/l-asphalte", "source_type": "regional_directory", "title": "L'Asphalte · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes both courts as doubles courts.", "confidence": "probable"},
         {"url": "https://www.geneve.ch/asphalte", "source_type": "commune", "title": "L'Asphalte | Ville de Genève", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.aliases", "relation": "supports", "evidence": "The official page title names L'Asphalte and identifies the site as Pointe de la Jonction.", "confidence": "confirmed"},
-        {"url": "https://www.geneve.ch/asphalte", "source_type": "commune", "title": "L'Asphalte | Ville de Genève", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.official_url", "relation": "supports", "evidence": "The City page is the current official page for L'Asphalte.", "confidence": "confirmed"}
+        {"url": "https://www.geneve.ch/asphalte", "source_type": "commune", "title": "L'Asphalte | Ville de Genève", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.official_url", "relation": "supports", "evidence": "The City page is the current official page for L'Asphalte.", "confidence": "confirmed"},
+        {"url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9", "source_type": "official_platform", "title": "Padel Connect public booking grid", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Matchpoint tenant displays the Jonction booking grid with Jonction 1 and Jonction 2.", "confidence": "confirmed"},
+        {"url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9", "source_type": "official_platform", "title": "Padel Connect public booking grid", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The public grid is served by the Padel Connect Matchpoint tenant.", "confidence": "confirmed"}
       ],
-      "notes": "The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains.",
+      "notes": "The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.",
       "brand": null,
       "address": "Sentier des Saules 19, 1205 Genève",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "seasonal",
       "official_url": "https://www.geneve.ch/asphalte",
-      "booking_url": "https://www.padel-academy.ch/",
-      "booking_platform": null
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9",
+      "booking_platform": "Padel Connect"
     },
     {
       "location_id": "padel-station",
@@ -302,16 +304,18 @@
         {"url": "https://www.padelconnect.ch/", "source_type": "official_platform", "title": "Padel Connect", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.booking_account_required", "relation": "supports", "evidence": "Padel Connect's public instructions require an account for reservations.", "confidence": "confirmed"},
         {"url": "https://www.padelconnect.ch/", "source_type": "official_platform", "title": "Padel Connect", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The foundation directs users to Padel Connect for reservations.", "confidence": "confirmed"},
         {"url": "https://www.padelconnect.ch/", "source_type": "official_platform", "title": "Padel Connect", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "Padel Connect is the named reservation platform.", "confidence": "confirmed"},
-        {"url": "https://www.evaux.ch/index.php/reserver/reservation-padel", "source_type": "official", "title": "Réservation Padel | Fondation des Evaux", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.official_url", "relation": "supports", "evidence": "The foundation page identifies the padel facility.", "confidence": "confirmed"}
+        {"url": "https://www.evaux.ch/index.php/reserver/reservation-padel", "source_type": "official", "title": "Réservation Padel | Fondation des Evaux", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.official_url", "relation": "supports", "evidence": "The foundation page identifies the padel facility.", "confidence": "confirmed"},
+        {"url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8", "source_type": "official_platform", "title": "Padel Connect public booking grid", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Matchpoint tenant displays the Parc des Evaux booking grid with Evaux 1, Evaux 2, and Evaux 3.", "confidence": "confirmed"},
+        {"url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8", "source_type": "official_platform", "title": "Padel Connect public booking grid", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The public grid is served by the Padel Connect Matchpoint tenant.", "confidence": "confirmed"}
       ],
-      "notes": "The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement.",
+      "notes": "The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement. The public Padel Connect grid is directly available at the verified Matchpoint URL; an account remains required for booking.",
       "brand": null,
       "address": "Chemin François Chavaz 110, 1213 Onex",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": "https://www.evaux.ch/index.php/reserver/reservation-padel",
-      "booking_url": "https://www.padelconnect.ch/",
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8",
       "booking_platform": "Padel Connect"
     },
     {
@@ -371,17 +375,20 @@
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-bernex", "source_type": "regional_directory", "title": "Centre Sportif de Bernex · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Bernex.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-bernex", "source_type": "regional_directory", "title": "Centre Sportif de Bernex · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists two outdoor doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-bernex", "source_type": "regional_directory", "title": "Centre Sportif de Bernex · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the two courts as doubles courts.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-bernex", "source_type": "regional_directory", "title": "Centre Sportif de Bernex · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-bernex", "source_type": "regional_directory", "title": "Centre Sportif de Bernex · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"},
+        {"url": "https://www.padel-academy.ch/bernex", "source_type": "official", "title": "TC Bernex | Padel Academy", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The official Padel Academy Bernex page directs court reservations to Padel Connect.", "confidence": "confirmed"},
+        {"url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx", "source_type": "official_platform", "title": "Padel Connect public booking grid", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Matchpoint tenant displays the Bernex booking grid with Terrain Bleu and Terrain Vert.", "confidence": "confirmed"},
+        {"url": "https://www.padel-academy.ch/bernex", "source_type": "official", "title": "TC Bernex | Padel Academy", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The official Bernex page names Padel Connect as the court reservation service.", "confidence": "confirmed"}
       ],
-      "notes": "Only regional directory address, court, and cover facts are retained. Current access, booking, operator, rental, locker, and account facts are unknown.",
+      "notes": "The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.",
       "brand": null,
       "address": "Chemin du Gamay, 1233 Bernex",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx",
+      "booking_platform": "Padel Connect"
     },
     {
       "location_id": "fraisiers",
@@ -859,17 +866,20 @@
         {"url": "https://padelhike.ch/en/clubs/urban-padel-lausanne", "source_type": "regional_directory", "title": "Urban Padel Lausanne · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Lausanne.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/urban-padel-lausanne", "source_type": "regional_directory", "title": "Urban Padel Lausanne · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists four indoor doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/urban-padel-lausanne", "source_type": "regional_directory", "title": "Urban Padel Lausanne · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the four courts as doubles courts.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/urban-padel-lausanne", "source_type": "regional_directory", "title": "Urban Padel Lausanne · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as indoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/urban-padel-lausanne", "source_type": "regional_directory", "title": "Urban Padel Lausanne · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as indoor.", "confidence": "probable"},
+        {"url": "https://urban-padel.ch/", "source_type": "official", "title": "Accueil | Urban Padel", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The official Urban Padel page links online booking to its Matchpoint tenant.", "confidence": "confirmed"},
+        {"url": "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx", "source_type": "official_platform", "title": "Urban Padel Lausanne public booking grid", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Matchpoint tenant displays the Padel schedule with four courts.", "confidence": "confirmed"},
+        {"url": "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx", "source_type": "official_platform", "title": "Urban Padel Lausanne public booking grid", "checked_at": "2026-09-25T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking portal footer identifies Matchpoint as the scheduling software.", "confidence": "confirmed"}
       ],
-      "notes": "The checked directory supports only the address, four-court count, and indoor classification. The official domain is Coming Soon; access and booking are unknown.",
+      "notes": "The official Urban Padel page now links to its Matchpoint booking portal. The address and court facts remain regional-directory evidence; access, membership, account, rental, and locker facts are not verified in this record.",
       "brand": null,
       "address": "Avenue des Bergières 10, 1004 Lausanne",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "indoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx",
+      "booking_platform": "Matchpoint"
     },
     {
       "location_id": "ehl-padel-club",

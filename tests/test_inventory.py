@@ -1,7 +1,9 @@
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -12,8 +14,8 @@ from padel_availability.database import (
     list_locations,
 )
 from padel_availability.inventory import (
-    import_candidates,
     build_catalog,
+    import_candidates,
     load_candidates,
     load_locations,
     validate_candidate_set,
@@ -25,8 +27,8 @@ from padel_availability.models import (
     LocationRecord,
     ModelError,
     SourceEvidence,
-    VerificationStatus,
     VerificationRun,
+    VerificationStatus,
 )
 
 
@@ -184,7 +186,9 @@ def test_known_fact_requires_supporting_evidence_with_exact_fact_key() -> None:
         validate_verified_catalog((candidate("one"),), (location,))
 
 
-def test_load_locations_validates_catalog_metadata_and_candidate_assignments(tmp_path: Path) -> None:
+def test_load_locations_validates_catalog_metadata_and_candidate_assignments(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "locations.json"
     path.write_text(
         json.dumps(
@@ -222,9 +226,7 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
     assert len(locations) == 29
     assigned = [candidate_id for location in locations for candidate_id in location.candidate_ids]
     assert len(assigned) == len(set(assigned)) == 29
-    assert set(assigned) == {
-        entry.candidate_id for entry in candidates
-    }
+    assert set(assigned) == {entry.candidate_id for entry in candidates}
     assert {location.verification_status for location in locations} == {
         "confirmed",
         "probable",
@@ -239,9 +241,7 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
     assert all(location.evidence for location in locations)
 
     for location in locations:
-        fact_keys = {
-            item.fact_key for item in location.evidence if item.relation == "supports"
-        }
+        fact_keys = {item.fact_key for item in location.evidence if item.relation == "supports"}
         for field, fact_key in (
             ("access_kind", "location.access_kind"),
             ("membership_required", "location.membership_required"),
@@ -262,8 +262,7 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
                     assert any(
                         group.format.lower() in item.evidence.lower()
                         for item in location.evidence
-                        if item.relation == "supports"
-                        and item.fact_key == "location.court_format"
+                        if item.relation == "supports" and item.fact_key == "location.court_format"
                     )
         if location.address is not None:
             assert "location.address" in fact_keys
@@ -279,8 +278,45 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
             assert "location.aliases" in fact_keys
 
 
+def test_matchpoint_locations_have_current_booking_evidence() -> None:
+    locations = {
+        location.location_id: location
+        for location in load_locations(Path("data/verified_locations.json"))
+    }
+
+    expected = {
+        "asphalte-jonction": (
+            "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9",
+            "Padel Connect",
+        ),
+        "bernex": (
+            "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx",
+            "Padel Connect",
+        ),
+        "evaux": (
+            "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8",
+            "Padel Connect",
+        ),
+        "urban-padel-lausanne": (
+            "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx",
+            "Matchpoint",
+        ),
+    }
+    for location_id, (booking_url, booking_platform) in expected.items():
+        location = locations[location_id]
+        assert location.booking_url == booking_url
+        assert location.booking_platform == booking_platform
+        supporting_facts = {
+            item.fact_key for item in location.evidence if item.relation == "supports"
+        }
+        assert {"location.booking_url", "location.booking_platform"} <= supporting_facts
+
+
 def test_published_price_and_duration_evidence_is_source_backed() -> None:
-    locations = {location.location_id: location for location in load_locations(Path("data/verified_locations.json"))}
+    locations = {
+        location.location_id: location
+        for location in load_locations(Path("data/verified_locations.json"))
+    }
     airpad_facts = {
         "location.price": "The operator publishes standard prices of CHF 13 for 60 minutes, CHF 15 for 90 minutes, and CHF 18 for 120 minutes, plus off-peak prices of CHF 8, CHF 10, and CHF 13 for those durations.",
         "location.duration": "The operator publishes booking durations of 60, 90, and 120 minutes for its standard and off-peak padel tariffs.",
@@ -290,22 +326,34 @@ def test_published_price_and_duration_evidence_is_source_backed() -> None:
         "airpad-la-praille": ("https://www.airpad.ch/airpad", airpad_facts),
         "airpad-meyrin": ("https://www.airpad.ch/airpad", airpad_facts),
         "airpad-plan-les-ouates": ("https://www.airpad.ch/airpad", airpad_facts),
-        "padel-station": ("https://padelstation.ch/", {
-            "location.price": "The operator publishes weekday prices: early bird CHF 36/1h, standard CHF 50/1.5h, premium CHF 56/1h, and afterwork CHF 56/1.5h; weekend CHF 56/1.5h.",
-            "location.duration": "The operator publishes weekday durations of 1h (early bird and premium) and 1.5h (standard and afterwork), plus 1.5h on weekends.",
-        }),
-        "maisonnex": ("https://shop.bookinea.app/fr/meyrin-sports", {
-            "location.price": "The portal lists Padel 90 minutes at CHF 60.00 and Entrée individuelle Invité Padel at CHF 15.00.",
-            "location.duration": "The portal lists Padel 90 minutes.",
-        }),
-        "vernier": ("https://www.vernier.ch/vie-pratique/demarches/courts-de-padel-reservations", {
-            "location.price": "The page publishes a unique tariff of CHF 48.– / 1h30.",
-            "location.duration": "The page publishes the padel booking duration as 1h30.",
-        }),
-        "vaudoise-arena": ("https://vaudoisearena.ch/centres-sportifs/padel", {
-            "location.price": "The operator publishes off-peak CHF 42.- / h and peak CHF 52.- / h for padel.",
-            "location.duration": "The operator publishes both padel rates per hour.",
-        }),
+        "padel-station": (
+            "https://padelstation.ch/",
+            {
+                "location.price": "The operator publishes weekday prices: early bird CHF 36/1h, standard CHF 50/1.5h, premium CHF 56/1h, and afterwork CHF 56/1.5h; weekend CHF 56/1.5h.",
+                "location.duration": "The operator publishes weekday durations of 1h (early bird and premium) and 1.5h (standard and afterwork), plus 1.5h on weekends.",
+            },
+        ),
+        "maisonnex": (
+            "https://shop.bookinea.app/fr/meyrin-sports",
+            {
+                "location.price": "The portal lists Padel 90 minutes at CHF 60.00 and Entrée individuelle Invité Padel at CHF 15.00.",
+                "location.duration": "The portal lists Padel 90 minutes.",
+            },
+        ),
+        "vernier": (
+            "https://www.vernier.ch/vie-pratique/demarches/courts-de-padel-reservations",
+            {
+                "location.price": "The page publishes a unique tariff of CHF 48.– / 1h30.",
+                "location.duration": "The page publishes the padel booking duration as 1h30.",
+            },
+        ),
+        "vaudoise-arena": (
+            "https://vaudoisearena.ch/centres-sportifs/padel",
+            {
+                "location.price": "The operator publishes off-peak CHF 42.- / h and peak CHF 52.- / h for padel.",
+                "location.duration": "The operator publishes both padel rates per hour.",
+            },
+        ),
     }
 
     for location_id, (url, fact_evidence) in expected.items():
@@ -339,10 +387,13 @@ def test_build_catalog_is_atomic_and_idempotent(tmp_path: Path) -> None:
 
         assert list_locations(connection) == first_locations
         assert list_candidate_matches(connection) == first_matches
-        assert tuple(
-            connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in ("sources", "location_evidence", "candidate_matches")
-        ) == first_counts
+        assert (
+            tuple(
+                connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("sources", "location_evidence", "candidate_matches")
+            )
+            == first_counts
+        )
         assert connection.execute("SELECT COUNT(*) FROM verification_runs").fetchone()[0] == 1
     finally:
         connection.close()
@@ -452,28 +503,37 @@ def test_validate_candidate_set_rejects_duplicate_ids_and_blank_municipalities()
         validate_candidate_set((CandidateEntry("one", "One", " ", None, None, None),))
 
 
+def test_validate_candidate_set_rejects_non_candidate_objects() -> None:
+    with pytest.raises(TypeError, match="CandidateEntry"):
+        validate_candidate_set(cast(Sequence[CandidateEntry], (object(),)))
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         [],
         [{"candidate_id": "one"}],
-        [{
-            "candidate_id": "one",
-            "raw_name": " ",
-            "municipality": "Genève",
-            "courts_text": None,
-            "type_text": None,
-            "access_text": None,
-        }],
-        [{
-            "candidate_id": "one",
-            "raw_name": "One",
-            "municipality": "Genève",
-            "courts_text": None,
-            "type_text": None,
-            "access_text": None,
-            "unexpected": "reject me",
-        }],
+        [
+            {
+                "candidate_id": "one",
+                "raw_name": " ",
+                "municipality": "Genève",
+                "courts_text": None,
+                "type_text": None,
+                "access_text": None,
+            }
+        ],
+        [
+            {
+                "candidate_id": "one",
+                "raw_name": "One",
+                "municipality": "Genève",
+                "courts_text": None,
+                "type_text": None,
+                "access_text": None,
+                "unexpected": "reject me",
+            }
+        ],
     ],
 )
 def test_load_candidates_rejects_invalid_json_payloads(tmp_path: Path, payload: object) -> None:
@@ -481,6 +541,15 @@ def test_load_candidates_rejects_invalid_json_payloads(tmp_path: Path, payload: 
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ValueError):
+        load_candidates(path)
+
+
+@pytest.mark.parametrize("payload", [{}, ["not an object"]])
+def test_load_candidates_rejects_wrong_json_types(tmp_path: Path, payload: object) -> None:
+    path = tmp_path / "candidates.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(TypeError):
         load_candidates(path)
 
 
@@ -548,10 +617,7 @@ def test_fixture_import_round_trips_all_29_candidates(tmp_path: Path) -> None:
             "FROM candidate_entries ORDER BY candidate_id"
         ).fetchall()
         assert len(rows) == 29
-        assert {
-            row["candidate_id"]: tuple(row[1:])
-            for row in rows
-        } == {
+        assert {row["candidate_id"]: tuple(row[1:]) for row in rows} == {
             entry.candidate_id: (
                 entry.raw_name,
                 entry.municipality,
@@ -561,13 +627,19 @@ def test_fixture_import_round_trips_all_29_candidates(tmp_path: Path) -> None:
             )
             for entry in entries
         }
-        assert connection.execute(
-            "SELECT access_text FROM candidate_entries WHERE candidate_id = ?",
-            ("fraisiers",),
-        ).fetchone()[0] == "À vérifier"
-        assert connection.execute(
-            "SELECT access_text FROM candidate_entries WHERE candidate_id = ?",
-            ("padel-parc-etoy",),
-        ).fetchone()[0] is None
+        assert (
+            connection.execute(
+                "SELECT access_text FROM candidate_entries WHERE candidate_id = ?",
+                ("fraisiers",),
+            ).fetchone()[0]
+            == "À vérifier"
+        )
+        assert (
+            connection.execute(
+                "SELECT access_text FROM candidate_entries WHERE candidate_id = ?",
+                ("padel-parc-etoy",),
+            ).fetchone()[0]
+            is None
+        )
     finally:
         connection.close()

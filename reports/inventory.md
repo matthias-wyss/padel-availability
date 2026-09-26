@@ -1,7 +1,7 @@
 # Padel Availability Inventory
 
 ## Summary
-- Verification run: inventory-2026-09-21
+- Verification run: inventory-2026-09-26
 - Started (UTC): 2026-09-21T00:00:00Z
 - Ended (UTC): 2026-09-21T00:00:00Z
 - Candidates: 29
@@ -113,8 +113,9 @@
 - Courts: covered seasonal courts (2)
 - Adresse: Sentier des Saules 19, 1205 Genève
 - Site officiel: [https://www.geneve.ch/asphalte](<https://www.geneve.ch/asphalte>)
-- Réservation: [https://www.padel-academy.ch/](<https://www.padel-academy.ch/>)
-- Notes: The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains.
+- Réservation: [https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9>)
+- Plateforme: Padel Connect
+- Notes: The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.
 
 ### GVA Padel / Palexpo \(Grand-Saconnex\)
 - Location ID: gva-palexpo
@@ -198,9 +199,9 @@
 - Courts: open-air courts (3)
 - Adresse: Chemin François Chavaz 110, 1213 Onex
 - Site officiel: [https://www.evaux.ch/index.php/reserver/reservation-padel](<https://www.evaux.ch/index.php/reserver/reservation-padel>)
-- Réservation: [https://www.padelconnect.ch/](<https://www.padelconnect.ch/>)
+- Réservation: [https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8>)
 - Plateforme: Padel Connect
-- Notes: The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement.
+- Notes: The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement. The public Padel Connect grid is directly available at the verified Matchpoint URL; an account remains required for booking.
 
 ### AIRPAD Plan-les-Ouates \(Plan-les-Ouates\)
 - Location ID: airpad-plan-les-ouates
@@ -317,7 +318,9 @@
 - Couverture: outdoor
 - Courts: outdoor courts (2)
 - Adresse: Chemin du Gamay, 1233 Bernex
-- Notes: Only regional directory address, court, and cover facts are retained. Current access, booking, operator, rental, locker, and account facts are unknown.
+- Réservation: [https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx>)
+- Plateforme: Padel Connect
+- Notes: The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.
 
 ### Padel de Collonge-Bellerive \(Collonge-Bellerive\)
 - Location ID: collonge-bellerive
@@ -452,7 +455,9 @@
 - Couverture: indoor
 - Courts: indoor courts (4)
 - Adresse: Avenue des Bergières 10, 1004 Lausanne
-- Notes: The checked directory supports only the address, four-court count, and indoor classification. The official domain is Coming Soon; access and booking are unknown.
+- Réservation: [https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx](<https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx>)
+- Plateforme: Matchpoint
+- Notes: The official Urban Padel page now links to its Matchpoint booking portal. The address and court facts remain regional-directory evidence; access, membership, account, rental, and locker facts are not verified in this record.
 
 ### Tennis Club Mies-Tannay \(Mies\)
 - Location ID: mies-tannay
@@ -490,8 +495,8 @@
 - Candidate airpad-les-acacias: matched -> airpad-les-acacias (The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
 - Candidate airpad-meyrin: matched -> airpad-meyrin (The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
 - Candidate airpad-plan-les-ouates: matched -> airpad-plan-les-ouates (The operator confirms this as a separate AIRPAD site. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
-- Candidate asphalte-jonction: matched -> asphalte-jonction (The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains.)
-- Candidate bernex: unresolved -> bernex (Only regional directory address, court, and cover facts are retained. Current access, booking, operator, rental, locker, and account facts are unknown.)
+- Candidate asphalte-jonction: matched -> asphalte-jonction (The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.)
+- Candidate bernex: unresolved -> bernex (The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.)
 - Candidate cherpines: matched -> cherpines (The commune supports the court count, public access, reservation, equipment rental, and locker-room information. The page does not provide a street address, cover classification, membership rule, or account requirement.)
 - Candidate collonge-bellerive: matched -> collonge-bellerive (Only regional directory address, court, and cover facts are retained. Current club identity, access, booking, rental, locker, and account details are unknown.)
 - Candidate cologny: matched -> cologny (Only regional directory address, court, and cover facts are retained. Access, group conditions, booking, rental, locker, and account details are unknown.)
@@ -500,7 +505,7 @@
 - Candidate david-lloyd-geneva: matched -> david-lloyd-geneva (Only regional directory address, court, and cover facts are retained. Membership and all booking/access details are unknown rather than inherited from the candidate list.)
 - Candidate drizia-miremont: unresolved -> drizia-miremont (The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.)
 - Candidate ehl-padel-club: matched -> ehl-padel-club (The checked directory supports only the address, two-court count, and outdoor classification. Campus eligibility, access, booking, rentals, lockers, and account requirements are unknown.)
-- Candidate evaux: matched -> evaux (The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement.)
+- Candidate evaux: matched -> evaux (The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement. The public Padel Connect grid is directly available at the verified Matchpoint URL; an account remains required for booking.)
 - Candidate everness: matched -> everness (The official page supports the venue address, online-only booking, and free racket rental. It does not state court count, cover, locker rooms, membership, account requirement, or booking platform; those fields are unknown.)
 - Candidate fraisiers: unresolved -> fraisiers (The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.)
 - Candidate gland: matched -> gland (The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. Access and booking are unknown.)
@@ -512,7 +517,7 @@
 - Candidate padel-parc-etoy: matched -> padel-parc-etoy (The operator supports the address, three indoor courts, Playtomic booking, equipment rental, and changing rooms. Access, membership, and account requirements are unknown.)
 - Candidate padel-parc-preverenges: matched -> padel-parc-preverenges (The operator supports the address, three indoor courts, Playtomic booking, equipment rental, and changing rooms. Access, membership, and account requirements are unknown.)
 - Candidate padel-station: matched -> padel-station (The operator supports the listed venue, address, indoor court count, public access, and Playtomic booking. The page says rackets are available but does not establish rental; racket rental, membership, account, and locker requirements are unknown.)
-- Candidate urban-padel-lausanne: matched -> urban-padel-lausanne (The checked directory supports only the address, four-court count, and indoor classification. The official domain is Coming Soon; access and booking are unknown.)
+- Candidate urban-padel-lausanne: matched -> urban-padel-lausanne (The official Urban Padel page now links to its Matchpoint booking portal. The address and court facts remain regional-directory evidence; access, membership, account, rental, and locker facts are not verified in this record.)
 - Candidate vaudoise-arena: matched -> vaudoise-arena (The official page supports two seasonal outdoor courts, public Playtomic booking, off-peak CHF 42/h and peak CHF 52/h pricing, and equipment rental. It does not state the physical street address, access kind, membership, lockers, or account requirement; those fields are unknown.)
 - Candidate vernier: matched -> vernier (The commune confirms the named facility and address, while its current reservation page confirms two outdoor courts, online reservation and payment, and CHF 48.– for 1h30 through Padel First. Doubles format remains a probable directory-only fact; access, account, rental, locker, and alias details are unknown.)
 ### Aliases
@@ -521,7 +526,7 @@
 ## Missing or unknown facts
 Unknown values are rendered as `Inconnu`.
 - David Lloyd Country Club Geneva \(Bellevue\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Court de padel / TC Bernex \(Bernex\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Court de padel / TC Bernex \(Bernex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Everness \(Chavannes-de-Bogis\): access_kind, booking_account_required, booking_platform, brand, court_groups, locker_rooms, membership_required, overall_cover_status
 - Padel Station \(Chêne-Bourg\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - Padel de Collonge-Bellerive \(Collonge-Bellerive\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
@@ -532,13 +537,13 @@ Unknown values are rendered as `Inconnu`.
 - AIRPAD Les Acacias \(Genève\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - CSU Champel \(Genève\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Drizia-Miremont / Bout-du-Monde \(Genève\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- L'Asphalte / Pointe de la Jonction \(Genève\): booking_account_required, booking_platform, brand, locker_rooms, membership_required, racket_rental
+- L'Asphalte / Pointe de la Jonction \(Genève\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - Padel Tennis Gland \(Gland\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - GVA Padel / Palexpo \(Grand-Saconnex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - AIRPAD La Praille \(Lancy\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - EHL Padel Club \(Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Urban Padel Lausanne \(Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Urban Padel Lausanne \(Lausanne\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - AIRPAD Meyrin \(Meyrin\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - Centre sportif de Maisonnex \(Meyrin\): address, booking_account_required, brand, court_groups, locker_rooms, membership_required, official_url, overall_cover_status, racket_rental
 - Tennis Club Mies-Tannay \(Mies\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
@@ -552,7 +557,7 @@ Unknown values are rendered as `Inconnu`.
 
 ## Source evidence and contradictions
 ### Unresolved candidates
-- bernex: Only regional directory address, court, and cover facts are retained. Current access, booking, operator, rental, locker, and account facts are unknown.
+- bernex: The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.
 - drizia-miremont: The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.
 - fraisiers: The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.
 - gva-palexpo: The operator's current 2026 page wins the three-versus-two court conflict and establishes seasonal operation. The regional two-court observation remains as explicit contradictory evidence. Access, membership, rental, locker, and account requirements are unknown.
@@ -569,6 +574,11 @@ Unknown values are rendered as `Inconnu`.
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.official\_url — supports; The operator page identifies GVA Padel. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.public\_booking — supports; The operator provides a Playtomic booking route. (vérifié: 2026-09-21T00:00:00Z)
 - Everness \(Chavannes-de-Bogis\): [Everness padel reservations](<https://padel.everness.ch/>) — location.booking\_url — supports; The operator's linked reservation page is padel.everness.ch. (vérifié: 2026-09-21T00:00:00Z)
+- Court de padel / TC Bernex \(Bernex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_url — supports; The public Matchpoint tenant displays the Bernex booking grid with Terrain Bleu and Terrain Vert. (vérifié: 2026-09-25T00:00:00Z)
+- Padel des Evaux \(Onex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8>) — location.booking\_platform — supports; The public grid is served by the Padel Connect Matchpoint tenant. (vérifié: 2026-09-26T00:00:00Z)
+- Padel des Evaux \(Onex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8>) — location.booking\_url — supports; The public Matchpoint tenant displays the Parc des Evaux booking grid with Evaux 1, Evaux 2, and Evaux 3. (vérifié: 2026-09-26T00:00:00Z)
+- L'Asphalte / Pointe de la Jonction \(Genève\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9>) — location.booking\_platform — supports; The public grid is served by the Padel Connect Matchpoint tenant. (vérifié: 2026-09-26T00:00:00Z)
+- L'Asphalte / Pointe de la Jonction \(Genève\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9>) — location.booking\_url — supports; The public Matchpoint tenant displays the Jonction booking grid with Jonction 1 and Jonction 2. (vérifié: 2026-09-26T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [Centre Sportif de Bernex · padelhike](<https://padelhike.ch/en/clubs/centre-sportif-de-bernex>) — location.address — supports; The regional directory lists Chemin du Gamay, 1233 Bernex. (vérifié: 2026-09-21T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [Centre Sportif de Bernex · padelhike](<https://padelhike.ch/en/clubs/centre-sportif-de-bernex>) — location.court\_format — supports; The regional directory explicitly describes the two courts as doubles courts. (vérifié: 2026-09-21T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [Centre Sportif de Bernex · padelhike](<https://padelhike.ch/en/clubs/centre-sportif-de-bernex>) — location.courts — supports; The regional directory lists two outdoor doubles courts. (vérifié: 2026-09-21T00:00:00Z)
@@ -684,6 +694,9 @@ Unknown values are rendered as `Inconnu`.
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.municipality — supports; The current booking portal identifies the service as Meyrin Sports. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.price — supports; The portal lists Padel 90 minutes at CHF 60.00 and Entrée individuelle Invité Padel at CHF 15.00. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.public\_booking — supports; The current portal lists Padel 90 minutes reservation. (vérifié: 2026-09-21T00:00:00Z)
+- Urban Padel Lausanne \(Lausanne\): [Accueil \| Urban Padel](<https://urban-padel.ch/>) — location.booking\_url — supports; The official Urban Padel page links online booking to its Matchpoint tenant. (vérifié: 2026-09-25T00:00:00Z)
+- Urban Padel Lausanne \(Lausanne\): [Urban Padel Lausanne public booking grid](<https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_platform — supports; The booking portal footer identifies Matchpoint as the scheduling software. (vérifié: 2026-09-25T00:00:00Z)
+- Urban Padel Lausanne \(Lausanne\): [Urban Padel Lausanne public booking grid](<https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_url — supports; The public Matchpoint tenant displays the Padel schedule with four courts. (vérifié: 2026-09-25T00:00:00Z)
 - Vaudoise aréna \(Prilly\): [Centre de padel à la Vaudoise aréna](<https://vaudoisearena.ch/centres-sportifs/padel>) — location.courts — supports; The operator says the spring-summer installation has two outdoor courts. (vérifié: 2026-09-21T00:00:00Z)
 - Vaudoise aréna \(Prilly\): [Centre de padel à la Vaudoise aréna](<https://vaudoisearena.ch/centres-sportifs/padel>) — location.cover\_status — supports; The operator says the outdoor courts operate from April to August as a seasonal installation. (vérifié: 2026-09-21T00:00:00Z)
 - Vaudoise aréna \(Prilly\): [Centre de padel à la Vaudoise aréna](<https://vaudoisearena.ch/centres-sportifs/padel>) — location.duration — supports; The operator publishes both padel rates per hour. (vérifié: 2026-09-21T00:00:00Z)
@@ -738,6 +751,8 @@ Unknown values are rendered as `Inconnu`.
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.cover\_status — supports; The City page places the temporary sports centre under the Jonction halls and says it operates during the belle saison. (vérifié: 2026-09-21T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.official\_url — supports; The City page is the current official page for L'Asphalte. (vérifié: 2026-09-21T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.public\_booking — supports; The City page says padel is paid and available by online reservation. (vérifié: 2026-09-21T00:00:00Z)
+- Court de padel / TC Bernex \(Bernex\): [TC Bernex \| Padel Academy](<https://www.padel-academy.ch/bernex>) — location.booking\_platform — supports; The official Bernex page names Padel Connect as the court reservation service. (vérifié: 2026-09-25T00:00:00Z)
+- Court de padel / TC Bernex \(Bernex\): [TC Bernex \| Padel Academy](<https://www.padel-academy.ch/bernex>) — location.booking\_url — supports; The official Padel Academy Bernex page directs court reservations to Padel Connect. (vérifié: 2026-09-25T00:00:00Z)
 - Padel One Echandens \(Echandens\): [Jouer \| Padel One](<https://www.padel-one.ch/jouer>) — location.booking\_platform — supports; The operator identifies Padel One CH as the booking service. (vérifié: 2026-09-21T00:00:00Z)
 - Padel One Echandens \(Echandens\): [Jouer \| Padel One](<https://www.padel-one.ch/jouer>) — location.booking\_url — supports; The operator's playing page is the reservation route. (vérifié: 2026-09-21T00:00:00Z)
 - Padel One Echandens \(Echandens\): [Nos Clubs \| Padel One](<https://www.padel-one.ch/nos-clubs>) — location.address — supports; The operator gives Route de la Venoge 20, 1026 Echandens. (vérifié: 2026-09-21T00:00:00Z)
