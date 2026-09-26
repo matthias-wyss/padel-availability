@@ -93,7 +93,7 @@ Map visible cell states conservatively:
 
 - free/open booking cell: `available`
 - reserved, closed, or occupied cell: `unavailable`
-- unrecognized visual state: `unknown`
+- explicitly recognized ambiguous visual state: `unknown`
 
 Fail closed with a connector error when:
 
@@ -103,7 +103,8 @@ Fail closed with a connector error when:
 - the selected activity is not `Padel`;
 - court labels or slot fields are malformed;
 - the visible matrix is partial or contains duplicate slots;
-- a cell state cannot be trusted as availability.
+- a cell has an absent or unrecognized raw state, or its visual state cannot be
+  trusted as availability.
 
 An explicitly visible no-availability message is a successful empty result.
 Absence of both slots and an explicit empty marker is an error, not an empty
