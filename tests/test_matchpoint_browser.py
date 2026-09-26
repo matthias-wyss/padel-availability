@@ -179,7 +179,11 @@ def test_visible_urban_matchpoint_grid_maps_cell_geometry(browser: Browser) -> N
 @pytest.mark.parametrize(
     ("fixture_name", "center", "courts"),
     [
-        ("padelconnect-evaux.html", "Parc des Evaux", ["Evaux 1", "Evaux 2"]),
+        (
+            "padelconnect-evaux.html",
+            "Parc des Evaux",
+            ["Evaux 1", "Evaux 2", "Evaux 3"],
+        ),
         ("padelconnect-jonction.html", "Jonction", ["Jonction 1", "Jonction 2"]),
     ],
 )
