@@ -11,6 +11,7 @@ from padel_availability.connectors.plugin_browser import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "plugin" / "dom" / "plugin-diary.html"
+WEEKLY_FIXTURE = Path(__file__).parent / "fixtures" / "plugin" / "dom" / "plugin-weekly-diary.html"
 REQUESTED_DATE = date(2026, 9, 26)
 
 
@@ -34,7 +35,7 @@ def test_parse_maps_states_and_keeps_variable_local_durations() -> None:
     payload = _payload()
     payload["slots"] = [
         {"court": "Court 1", "start": "09:00", "end": "10:30", "state": "available"},
-        {"court": "Court 2", "start": "09:00", "end": "10:00", "state": "booked"},
+        {"court": "Court 2", "start": "09:00", "end": "10:30", "state": "booked"},
         {"court": "Court 1", "start": "11:00", "end": "11:45", "state": "unknown"},
         {"court": "Court 2", "start": "11:00", "end": "11:45", "state": "available"},
     ]
@@ -43,7 +44,7 @@ def test_parse_maps_states_and_keeps_variable_local_durations() -> None:
 
     assert [(slot.status, slot.starts_at, slot.ends_at) for slot in observations] == [
         ("available", "2026-09-26T09:00:00+02:00", "2026-09-26T10:30:00+02:00"),
-        ("unavailable", "2026-09-26T09:00:00+02:00", "2026-09-26T10:00:00+02:00"),
+        ("unavailable", "2026-09-26T09:00:00+02:00", "2026-09-26T10:30:00+02:00"),
         ("unknown", "2026-09-26T11:00:00+02:00", "2026-09-26T11:45:00+02:00"),
         ("available", "2026-09-26T11:00:00+02:00", "2026-09-26T11:45:00+02:00"),
     ]
@@ -66,6 +67,16 @@ def test_ambiguous_zurich_fallback_time_is_rejected() -> None:
 
     with pytest.raises(PluginBrowserError, match="ambiguous"):
         parse_plugin_dom(payload, date(2026, 10, 25))
+
+
+def test_partial_matrix_is_rejected_even_when_every_court_appears_elsewhere() -> None:
+    payload = _payload()
+    payload["slots"].append(
+        {"court": "Court 1", "start": "11:00", "end": "12:00", "state": "available"}
+    )
+
+    with pytest.raises(PluginBrowserError, match="matrix"):
+        parse_plugin_dom(payload, REQUESTED_DATE)
 
 
 @pytest.mark.parametrize(
@@ -123,3 +134,96 @@ def test_fixture_is_a_sanitized_visible_diary_and_extracts_required_payload() ->
         "unknown",
         "available",
     ]
+
+
+def test_unrecognized_table_cell_label_is_not_guessed_as_booked() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".reservation tbody tr:first-child td:nth-child(2)").evaluate(
+            "element => element.textContent = 'maintenance'"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "maintenance"
+    with pytest.raises(PluginBrowserError, match="state"):
+        parse_plugin_dom(payload, REQUESTED_DATE)
+
+
+def test_blank_table_cell_fails_closed_instead_of_becoming_available() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".reservation tbody tr:first-child td:nth-child(2)").evaluate(
+            "element => element.textContent = ''"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == ""
+    with pytest.raises(PluginBrowserError, match="state"):
+        parse_plugin_dom(payload, REQUESTED_DATE)
+
+
+def test_weekly_fixture_extracts_only_explicit_visible_cell_states() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(WEEKLY_FIXTURE.read_text(encoding="utf-8"))
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    observations = parse_plugin_dom(payload, REQUESTED_DATE)
+    assert sorted(
+        (slot.court_label, slot.starts_at[11:16], slot.status) for slot in observations
+    ) == [
+        ("Court 1", "09:00", "available"),
+        ("Court 1", "10:00", "unknown"),
+        ("Court 2", "09:00", "unavailable"),
+        ("Court 2", "10:00", "available"),
+    ]
+
+
+def test_weekly_cell_with_unrecognized_visible_state_fails_closed() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(WEEKLY_FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".dhx_cal_event").first.evaluate(
+            "element => { element.textContent = 'maintenance'; element.setAttribute('aria-label', element.getAttribute('aria-label').replace('available', 'maintenance')); }"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "maintenance"
+    with pytest.raises(PluginBrowserError, match="state"):
+        parse_plugin_dom(payload, REQUESTED_DATE)
+
+
+def test_weekly_cell_without_visible_state_fails_closed() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(WEEKLY_FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".dhx_cal_event").first.evaluate(
+            "element => element.setAttribute('aria-label', element.getAttribute('aria-label').replace('; available', ''))"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == ""
+    with pytest.raises(PluginBrowserError, match="state"):
+        parse_plugin_dom(payload, REQUESTED_DATE)

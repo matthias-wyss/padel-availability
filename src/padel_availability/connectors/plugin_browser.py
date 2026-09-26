@@ -54,6 +54,13 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     ? `${dateMatch[3]}-${String(month).padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : '';
   const courts = [];
   const slots = [];
+  const stateOf = value => {
+    const state = value.trim().toLocaleLowerCase();
+    if (/^(available|free|open|libre|frei)$/.test(state)) return 'available';
+    if (/^(booked|occupied|reserved|unavailable|réservé|besetzt)$/.test(state)) return 'unavailable';
+    if (/^(unknown|partially booked|partially reserved|check availability|\?|notallowed)$/.test(state)) return 'unknown';
+    return state;
+  };
   const addCourt = name => {
     if (name && !/^(sa|di|lu|ma|me|je|ve)\s+\d+$/i.test(name) && !courts.includes(name)) courts.push(name);
   };
@@ -63,14 +70,12 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     addCourt(court);
     const start = (cell.getAttribute('heure') || '').trim();
     if (!court || !start) continue;
-    const stateText = (cell.innerText || '').trim().toLocaleLowerCase();
+    const stateText = (cell.matches('td.terrainTxt')
+      ? cell.querySelector('.event-time .start')?.innerText || '' : cell.innerText || '').trim();
     const classNames = cell.className.toLocaleLowerCase();
-    const background = getComputedStyle(cell).backgroundColor;
-    let state = stateText;
+    let state = stateOf(stateText);
     if (/notallowed/.test(classNames)) state = 'unknown';
-    else if (!stateText && cell.hasAttribute('style') && background !== 'rgba(0, 0, 0, 0)') state = 'unknown';
-    else if (!stateText) state = 'available';
-    else if (!/^(available|free|open|libre|frei|booked|occupied|reserved|unavailable|réservé|besetzt|unknown|partially booked|partially reserved|check availability|\?)$/i.test(stateText)) state = 'booked';
+    else if (/^\d{2}:\d{2}$/.test(stateText)) state = 'unavailable';
     const step = Number((classNames.match(/time_(\d+)/) || [])[1]);
     const rowspan = Number(cell.getAttribute('rowspan') || 1);
     let endMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3)) + step * rowspan;
@@ -86,7 +91,9 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
       slots.push({court, start, end: `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`, state});
     }
   }
-  const scaleBars = Array.from(document.querySelectorAll('.dhx_cal_header .dhx_scale_bar'))
+  const scaleBars = Array.from(document.querySelectorAll(
+    '.dhx_cal_header .dhx_scale_bar:not(.dhx_second_scale_bar)'
+  ))
     .filter(visible);
   for (const heading of scaleBars) addCourt((heading.innerText || '').trim());
   for (const event of Array.from(document.querySelectorAll('.dhx_cal_event')).filter(visible)) {
@@ -101,9 +108,12 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
         ? item : best;
     }, scaleBars[0]) : null;
     const court = header ? (header.innerText || '').trim() : '';
-    if (court) slots.push({court, start:match[2], end:match[4], state:'booked'});
+    const explicitState = label.match(/;\s*(.*?)\s*$/)?.[1];
+    const state = explicitState ? stateOf(explicitState) : '';
+    if (court) slots.push({court, start:match[2], end:match[4], state});
   }
-  const table = Array.from(document.querySelectorAll('table.reservation')).find(visible);
+  const table = Array.from(document.querySelectorAll('table.reservation'))
+    .filter(visible).find(candidate => !candidate.querySelector('td.terrainTxt'));
   if (table) {
     const headings = Array.from(table.querySelectorAll('thead th')).filter(visible).slice(1)
       .map(cell => (cell.innerText || '').trim());
@@ -115,10 +125,8 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
       const rowCells = Array.from(row.querySelectorAll('td')).filter(visible);
       rowCells.forEach((cell, index) => {
         const court = headings[index];
-        let state = (cell.innerText || '').trim().toLocaleLowerCase();
-        if (!state) state = /notallowed/i.test(cell.className) || cell.hasAttribute('style')
-          ? 'unknown' : 'available';
-        else if (!/^(available|free|open|libre|frei|booked|occupied|reserved|unavailable|réservé|besetzt|unknown|partially booked|partially reserved|check availability|\?)$/i.test(state)) state = 'booked';
+        const text = (cell.innerText || '').trim();
+        const state = /notallowed/i.test(cell.className) ? 'unknown' : stateOf(text);
         if (court) slots.push({court, start:times[1], end:times[2], state});
       });
     }
@@ -212,7 +220,7 @@ def parse_plugin_dom(
 
     observations: list[BrowserSlotObservation] = []
     keys: set[tuple[str, str, str]] = set()
-    seen_courts: set[str] = set()
+    interval_courts: dict[tuple[str, str], set[str]] = {}
     for item in cast(list[object], raw_slots):
         slot = _mapping(item, "visible slot")
         if set(slot) != _SLOT_FIELDS:
@@ -237,7 +245,11 @@ def parse_plugin_dom(
         if key in keys:
             raise PluginBrowserError("visible slots contain duplicates")
         keys.add(key)
-        seen_courts.add(court)
+        interval = (start_text, end_text)
+        courts_in_interval = interval_courts.setdefault(interval, set())
+        if court in courts_in_interval:
+            raise PluginBrowserError("visible slot matrix has a duplicate court interval")
+        courts_in_interval.add(court)
         raw_state = _text(slot["state"], "state").casefold()
         if raw_state in _AVAILABLE:
             status = "available"
@@ -256,6 +268,6 @@ def parse_plugin_dom(
                 status,
             )
         )
-    if seen_courts != set(courts):
+    if any(courts_in_interval != set(courts) for courts_in_interval in interval_courts.values()):
         raise PluginBrowserError("visible slot matrix is missing a court")
     return tuple(observations)

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Public weekly court diary</title>
+    <style>
+      body { font: 16px sans-serif; }
+      .dhx_cal_header { display: flex; gap: 1rem; }
+      .dhx_scale_bar, .dhx_scale_holder { box-sizing: border-box; width: 12rem; }
+      .dhx_cal_data { display: flex; }
+      .dhx_scale_holder { position: relative; height: 7rem; border: 1px solid #aaa; }
+      .dhx_cal_event { height: 2rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header_date">2026-09-26</div>
+      <label>Activity
+        <select class="sports-types"><option selected>Padel</option></select>
+      </label>
+    </header>
+    <div class="dhx_cal_header">
+      <div class="dhx_scale_bar">Court 1</div>
+      <div class="dhx_scale_bar">Court 2</div>
+    </div>
+    <div class="dhx_cal_data">
+      <div class="dhx_scale_holder" aria-label="26 Sep 2026" style="left: 0">
+        <div class="dhx_cal_event available-state"
+             aria-label="Start date: 2026-09-26 09:00 End date: 2026-09-26 10:00; available">available</div>
+        <div class="dhx_cal_event unknown-state"
+             aria-label="Start date: 2026-09-26 10:00 End date: 2026-09-26 11:00; partially booked">partially booked</div>
+      </div>
+      <div class="dhx_scale_holder" aria-label="26 Sep 2026" style="left: 12rem">
+        <div class="dhx_cal_event booked-state"
+             aria-label="Start date: 2026-09-26 09:00 End date: 2026-09-26 10:00; booked">booked</div>
+        <div class="dhx_cal_event available-state"
+             aria-label="Start date: 2026-09-26 10:00 End date: 2026-09-26 11:00; free">free</div>
+      </div>
+    </div>
+  </body>
+</html>
