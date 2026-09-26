@@ -77,6 +77,7 @@ class _FakePluginPage:
         self.url = ""
         self.closed = False
         self.cookie_visible = False
+        self.cookie_control_count = 0
         self.clicks: list[str] = []
         self.goto_args: list[tuple[str, str, int]] = []
 
@@ -88,6 +89,8 @@ class _FakePluginPage:
         if ".header_date button" in script:
             return 'button[aria-label="Next day"]'
         if "input[type=\"button\"]" in script:
+            if self.cookie_control_count > 1:
+                return "!ambiguous"
             return 'button[aria-label="Decline"]' if self.cookie_visible else ""
         payload = _payload()
         payload["date"] = self.current_date.isoformat()
@@ -227,6 +230,69 @@ def test_plugin_connector_persists_variable_dates_and_slot_states() -> None:
         ("2026-09-27T07:00:00Z", "2026-09-27T08:30:00Z", "available"),
         ("2026-09-27T07:00:00Z", "2026-09-27T08:30:00Z", "unavailable"),
     ]
+
+
+def test_plugin_connector_skips_unavailable_source_without_starting_browser() -> None:
+    unavailable_source = PluginSource(
+        SOURCE.location_id, SOURCE.booking_url, SOURCE.checked_at, "unavailable"
+    )
+    factory_calls = 0
+
+    def browser_factory() -> Any:
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("unavailable source must not start a browser")
+
+    connector = PluginBrowserConnector(
+        (unavailable_source,), browser_factory=cast(BrowserFactory, browser_factory)
+    )
+
+    result = _collect(connector, end=date(2026, 9, 27))
+
+    assert result.run.status == "unavailable"
+    assert result.run.source_url == SOURCE.booking_url
+    assert result.slots == ()
+    assert factory_calls == 0
+
+
+def test_plugin_connector_waits_for_two_stable_visible_date_payloads() -> None:
+    page = _FakePluginPage()
+    payloads = [_payload(), _payload(), _payload()]
+    payloads[0]["slots"][0]["state"] = "available"
+    payloads[1]["slots"][0]["state"] = "booked"
+    payloads[2]["slots"][0]["state"] = "booked"
+    original_evaluate = page.evaluate
+    visible_evaluations = 0
+
+    def evaluate(script: str, arg: object = None) -> Any:
+        nonlocal visible_evaluations
+        if script == _PLUGIN_VISIBLE_DOM_SCRIPT:
+            payload = payloads[min(visible_evaluations, len(payloads) - 1)]
+            visible_evaluations += 1
+            payload["date"] = REQUESTED_DATE.isoformat()
+            return payload
+        return original_evaluate(script, arg)
+
+    page.evaluate = evaluate  # type: ignore[method-assign]
+    connector, _context, _browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 27))
+
+    assert visible_evaluations == 3
+    assert [slot.status for slot in result.slots] == ["unavailable", "unavailable"]
+
+
+def test_plugin_connector_rejects_ambiguous_visible_cookie_controls() -> None:
+    page = _FakePluginPage()
+    page.cookie_visible = True
+    page.cookie_control_count = 2
+    connector, context, browser = _connector(page)
+
+    with pytest.raises(PluginBrowserError, match="cookie.*ambiguous"):
+        _collect(connector, end=date(2026, 9, 27))
+
+    assert page.clicks == []
+    assert page.closed and context.closed and browser.exited
 
 
 def test_parse_maps_states_and_keeps_variable_local_durations() -> None:

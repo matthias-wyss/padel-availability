@@ -305,6 +305,7 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
 
 
 def _wait_for_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: int) -> object:
+    previous_ready_dom: dict[str, object] | None = None
     for _ in range(max(1, timeout_ms // 100)):
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
         dom = _mapping(payload, "visible DOM")
@@ -316,7 +317,12 @@ def _wait_for_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: i
             and dom.get("loading") is False
             and _plugin_grid_ready(dom)
         ):
-            return payload
+            current_dom = dict(dom)
+            if current_dom == previous_ready_dom:
+                return payload
+            previous_ready_dom = current_dom
+        else:
+            previous_ready_dom = None
         page.wait_for_timeout(100)
     raise PluginBrowserError("timed out waiting for the requested Plugin date")
 
@@ -385,6 +391,20 @@ class PluginBrowserConnector:
         source = self._sources.get(location.location_id)
         if source is None:
             raise PluginSourceError("no source metadata for location")
+        if source.status == "unavailable":
+            run = AvailabilityRun(
+                run_id,
+                location.location_id,
+                "plugin_browser",
+                source.booking_url,
+                window_start.isoformat(),
+                window_end.isoformat(),
+                (window_end - window_start).days,
+                collected_at,
+                "unavailable",
+                "public Plugin booking diary is unavailable",
+            )
+            return AvailabilityResult(run, ())
         observations: list[BrowserSlotObservation] = []
         try:
             self.open()
