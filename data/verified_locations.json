@@ -409,17 +409,19 @@
         {"url": "https://padelhike.ch/en/clubs/tc-lancy-fraisiers", "source_type": "regional_directory", "title": "TC Lancy-Fraisiers · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Lancy.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-lancy-fraisiers", "source_type": "regional_directory", "title": "TC Lancy-Fraisiers · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists one outdoor doubles court.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-lancy-fraisiers", "source_type": "regional_directory", "title": "TC Lancy-Fraisiers · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the court as a doubles court.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/tc-lancy-fraisiers", "source_type": "regional_directory", "title": "TC Lancy-Fraisiers · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/tc-lancy-fraisiers", "source_type": "regional_directory", "title": "TC Lancy-Fraisiers · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"},
+        {"url": "https://tcfraisiers.plugin.ch/?sport=301", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://tcfraisiers.plugin.ch/?sport=301", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.",
+      "notes": "The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but access, booking, account and membership requirements, and alias identity remain unknown; public availability does not establish anonymous booking. Landagora's 2023 cession notice and the lack of current operator confirmation remain relevant.",
       "brand": null,
       "address": "Avenue du Curé-Baud 84, 1212 Grand-Lancy",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://tcfraisiers.plugin.ch/?sport=301",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "csu-champel",
@@ -440,17 +442,19 @@
         {"url": "https://padelhike.ch/en/clubs/csu-champel", "source_type": "regional_directory", "title": "CSU Champel · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Genève.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/csu-champel", "source_type": "regional_directory", "title": "CSU Champel · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists one outdoor doubles court.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/csu-champel", "source_type": "regional_directory", "title": "CSU Champel · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the court as a doubles court.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/csu-champel", "source_type": "regional_directory", "title": "CSU Champel · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/csu-champel", "source_type": "regional_directory", "title": "CSU Champel · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"},
+        {"url": "https://unige.plugin.ch/", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://unige.plugin.ch/", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The regional directory supports only the address, one-court count, and outdoor classification. University eligibility, membership, public booking, and other facility details are unknown.",
+      "notes": "The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but university eligibility, membership, and account requirements for booking remain unknown; public availability does not establish anonymous booking.",
       "brand": null,
       "address": "Chemin Edouard-Tavan 7, 1206 Genève",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://unige.plugin.ch/",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "drizia-miremont",
@@ -471,17 +475,19 @@
         {"url": "https://padelhike.ch/en/clubs/drizia-miremont-tennis-club", "source_type": "regional_directory", "title": "Drizia-Miremont Tennis Club · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Genève.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/drizia-miremont-tennis-club", "source_type": "regional_directory", "title": "Drizia-Miremont Tennis Club · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists one outdoor doubles court.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/drizia-miremont-tennis-club", "source_type": "regional_directory", "title": "Drizia-Miremont Tennis Club · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the court as a doubles court.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/drizia-miremont-tennis-club", "source_type": "regional_directory", "title": "Drizia-Miremont Tennis Club · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/drizia-miremont-tennis-club", "source_type": "regional_directory", "title": "Drizia-Miremont Tennis Club · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"},
+        {"url": "https://tcdrizia.plugin.ch/", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://tcdrizia.plugin.ch/", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.",
+      "notes": "The checked directory supports only the Drizia-Miremont address and court facts. The public Plugin.ch diary is visible, but access, account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias.",
       "brand": null,
       "address": "Route de Vessy 6, 1206 Genève",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://tcdrizia.plugin.ch/",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "cologny",
@@ -502,17 +508,19 @@
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-cologny", "source_type": "regional_directory", "title": "Centre Sportif de Cologny · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Cologny.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-cologny", "source_type": "regional_directory", "title": "Centre Sportif de Cologny · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists one indoor doubles court.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-cologny", "source_type": "regional_directory", "title": "Centre Sportif de Cologny · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the court as a doubles court.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-cologny", "source_type": "regional_directory", "title": "Centre Sportif de Cologny · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as indoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/centre-sportif-de-cologny", "source_type": "regional_directory", "title": "Centre Sportif de Cologny · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as indoor.", "confidence": "probable"},
+        {"url": "https://reservation.cs-cologny.ch/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://reservation.cs-cologny.ch/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "Only regional directory address, court, and cover facts are retained. Access, group conditions, booking, rental, locker, and account details are unknown.",
+      "notes": "Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but access, group conditions, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.",
       "brand": null,
       "address": "Chemin de la Tulette 8, 1223 Cologny",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "indoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://reservation.cs-cologny.ch/diary",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "collonge-bellerive",
@@ -533,17 +541,19 @@
         {"url": "https://padelhike.ch/en/clubs/tc-collonge-bellerive", "source_type": "regional_directory", "title": "TC Collonge-Bellerive · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Collonge-Bellerive.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-collonge-bellerive", "source_type": "regional_directory", "title": "TC Collonge-Bellerive · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists one outdoor doubles court.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-collonge-bellerive", "source_type": "regional_directory", "title": "TC Collonge-Bellerive · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the court as a doubles court.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/tc-collonge-bellerive", "source_type": "regional_directory", "title": "TC Collonge-Bellerive · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/tc-collonge-bellerive", "source_type": "regional_directory", "title": "TC Collonge-Bellerive · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the court as outdoor.", "confidence": "probable"},
+        {"url": "https://reservation.tccb.ch/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://reservation.tccb.ch/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "Only regional directory address, court, and cover facts are retained. Current club identity, access, booking, rental, locker, and account details are unknown.",
+      "notes": "Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but current club identity, access, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.",
       "brand": null,
       "address": "Chemin de Relion 22, 1245 Vésenaz",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://reservation.tccb.ch/diary",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "david-lloyd-geneva",
@@ -630,17 +640,19 @@
         {"url": "https://padelhike.ch/en/clubs/tc-mies", "source_type": "regional_directory", "title": "TC Mies · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Mies.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-mies", "source_type": "regional_directory", "title": "TC Mies · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists two outdoor doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-mies", "source_type": "regional_directory", "title": "TC Mies · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the two courts as doubles courts.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/tc-mies", "source_type": "regional_directory", "title": "TC Mies · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/tc-mies", "source_type": "regional_directory", "title": "TC Mies · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"},
+        {"url": "https://tcmt.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://tcmt.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. Access and booking are unknown.",
+      "notes": "The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.",
       "brand": null,
       "address": "Route de Vaytay 11, 1295 Mies",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://tcmt.plugin.ch/user/diary",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "crans-vd",
@@ -661,17 +673,19 @@
         {"url": "https://padelhike.ch/en/clubs/tp-crans", "source_type": "regional_directory", "title": "TP Crans · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Crans-près-Céligny.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tp-crans", "source_type": "regional_directory", "title": "TP Crans · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists three outdoor doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tp-crans", "source_type": "regional_directory", "title": "TP Crans · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the three courts as doubles courts.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/tp-crans", "source_type": "regional_directory", "title": "TP Crans · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/tp-crans", "source_type": "regional_directory", "title": "TP Crans · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as outdoor.", "confidence": "probable"},
+        {"url": "https://tccrans.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://tccrans.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The checked directory supports only the Crans address, court count, and outdoor classification. Access, booking, rentals, lockers, and account requirements are unknown.",
+      "notes": "The checked directory supports only the Crans address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. Rentals and locker details remain unknown.",
       "brand": null,
       "address": "Chemin des Sports 3, 1299 Crans",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "outdoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://tccrans.plugin.ch/user/diary",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "everness",
@@ -724,17 +738,19 @@
         {"url": "https://padelhike.ch/en/clubs/tc-gland", "source_type": "regional_directory", "title": "TC Gland · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.municipality", "relation": "supports", "evidence": "The regional directory places the site in Gland.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-gland", "source_type": "regional_directory", "title": "TC Gland · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.courts", "relation": "supports", "evidence": "The regional directory lists two indoor doubles courts.", "confidence": "probable"},
         {"url": "https://padelhike.ch/en/clubs/tc-gland", "source_type": "regional_directory", "title": "TC Gland · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.court_format", "relation": "supports", "evidence": "The regional directory explicitly describes the two courts as doubles courts.", "confidence": "probable"},
-        {"url": "https://padelhike.ch/en/clubs/tc-gland", "source_type": "regional_directory", "title": "TC Gland · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as indoor.", "confidence": "probable"}
+        {"url": "https://padelhike.ch/en/clubs/tc-gland", "source_type": "regional_directory", "title": "TC Gland · padelhike", "checked_at": "2026-09-21T00:00:00Z", "fact_key": "location.cover_status", "relation": "supports", "evidence": "The regional directory classifies the courts as indoor.", "confidence": "probable"},
+        {"url": "https://tcgland.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_url", "relation": "supports", "evidence": "The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking.", "confidence": "confirmed"},
+        {"url": "https://tcgland.plugin.ch/user/diary", "source_type": "official_platform", "title": "Plugin.ch public booking diary", "checked_at": "2026-09-26T00:00:00Z", "fact_key": "location.booking_platform", "relation": "supports", "evidence": "The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown.", "confidence": "confirmed"}
       ],
-      "notes": "The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. Access and booking are unknown.",
+      "notes": "The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.",
       "brand": null,
       "address": "Centre Sportif en Bord, 1196 Gland",
       "latitude": null,
       "longitude": null,
       "overall_cover_status": "indoor",
       "official_url": null,
-      "booking_url": null,
-      "booking_platform": null
+      "booking_url": "https://tcgland.plugin.ch/user/diary",
+      "booking_platform": "Plugin.ch"
     },
     {
       "location_id": "padel-parc-etoy",

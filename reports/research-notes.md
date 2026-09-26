@@ -52,6 +52,24 @@ selectors are `id=8` for Parc des Evaux and `id=9` for Jonction. `club=Evaux` an
 - [Jonction grid](https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9) visibly labels `Jonction` and courts `Jonction 1` and `Jonction 2`.
 - The grid is public for availability viewing; this does not remove Evaux's separately evidenced account requirement for completing a reservation.
 
+## Plugin.ch Booking Diary Verification
+
+The following public Plugin.ch diaries were checked on `2026-09-26T00:00:00Z`.
+Diary and availability visibility is public; this does not establish anonymous
+booking. Account, membership, and venue-access requirements remain unknown
+unless separately evidenced.
+
+| Candidate | Public diary | Platform |
+| --- | --- | --- |
+| Centre sportif de Cologny | [Diary](https://reservation.cs-cologny.ch/diary) | Plugin.ch |
+| Padel de Collonge-Bellerive | [Diary](https://reservation.tccb.ch/diary) | Plugin.ch |
+| Tennis Padel Crans VD | [Diary](https://tccrans.plugin.ch/user/diary) | Plugin.ch |
+| CSU Champel | [Diary](https://unige.plugin.ch/) | Plugin.ch |
+| Drizia-Miremont / Bout-du-Monde | [Diary](https://tcdrizia.plugin.ch/) | Plugin.ch |
+| Padel REDSPORT-LANDAGORA / TC Fraisiers | [Diary](https://tcfraisiers.plugin.ch/?sport=301) | Plugin.ch |
+| Padel Tennis Gland | [Diary](https://tcgland.plugin.ch/user/diary) | Plugin.ch |
+| Tennis Club Mies-Tannay | [Diary](https://tcmt.plugin.ch/user/diary) | Plugin.ch |
+
 ## Duplicate Decisions
 
 - AIRPAD remains four separate records; the operator lists them as separate sites.

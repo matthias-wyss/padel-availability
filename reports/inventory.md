@@ -335,7 +335,9 @@
 - Couverture: outdoor
 - Courts: outdoor court (1)
 - Adresse: Chemin de Relion 22, 1245 Vésenaz
-- Notes: Only regional directory address, court, and cover facts are retained. Current club identity, access, booking, rental, locker, and account details are unknown.
+- Réservation: [https://reservation.tccb.ch/diary](<https://reservation.tccb.ch/diary>)
+- Plateforme: Plugin.ch
+- Notes: Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but current club identity, access, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.
 
 ### Centre sportif de Cologny \(Cologny\)
 - Location ID: cologny
@@ -350,7 +352,9 @@
 - Couverture: indoor
 - Courts: indoor court (1)
 - Adresse: Chemin de la Tulette 8, 1223 Cologny
-- Notes: Only regional directory address, court, and cover facts are retained. Access, group conditions, booking, rental, locker, and account details are unknown.
+- Réservation: [https://reservation.cs-cologny.ch/diary](<https://reservation.cs-cologny.ch/diary>)
+- Plateforme: Plugin.ch
+- Notes: Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but access, group conditions, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.
 
 ### Tennis Padel Crans VD \(Crans-près-Céligny\)
 - Location ID: crans-vd
@@ -365,7 +369,9 @@
 - Couverture: outdoor
 - Courts: outdoor courts (3)
 - Adresse: Chemin des Sports 3, 1299 Crans
-- Notes: The checked directory supports only the Crans address, court count, and outdoor classification. Access, booking, rentals, lockers, and account requirements are unknown.
+- Réservation: [https://tccrans.plugin.ch/user/diary](<https://tccrans.plugin.ch/user/diary>)
+- Plateforme: Plugin.ch
+- Notes: The checked directory supports only the Crans address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. Rentals and locker details remain unknown.
 
 ### CSU Champel \(Genève\)
 - Location ID: csu-champel
@@ -380,7 +386,9 @@
 - Couverture: outdoor
 - Courts: outdoor court (1)
 - Adresse: Chemin Edouard-Tavan 7, 1206 Genève
-- Notes: The regional directory supports only the address, one-court count, and outdoor classification. University eligibility, membership, public booking, and other facility details are unknown.
+- Réservation: [https://unige.plugin.ch/](<https://unige.plugin.ch/>)
+- Plateforme: Plugin.ch
+- Notes: The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but university eligibility, membership, and account requirements for booking remain unknown; public availability does not establish anonymous booking.
 
 ### Drizia-Miremont / Bout-du-Monde \(Genève\)
 - Location ID: drizia-miremont
@@ -395,7 +403,9 @@
 - Couverture: outdoor
 - Courts: outdoor court (1)
 - Adresse: Route de Vessy 6, 1206 Genève
-- Notes: The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.
+- Réservation: [https://tcdrizia.plugin.ch/](<https://tcdrizia.plugin.ch/>)
+- Plateforme: Plugin.ch
+- Notes: The checked directory supports only the Drizia-Miremont address and court facts. The public Plugin.ch diary is visible, but access, account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias.
 
 ### Padel Tennis Gland \(Gland\)
 - Location ID: gland
@@ -410,7 +420,9 @@
 - Couverture: indoor
 - Courts: indoor courts (2)
 - Adresse: Centre Sportif en Bord, 1196 Gland
-- Notes: The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. Access and booking are unknown.
+- Réservation: [https://tcgland.plugin.ch/user/diary](<https://tcgland.plugin.ch/user/diary>)
+- Plateforme: Plugin.ch
+- Notes: The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.
 
 ### Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\)
 - Location ID: fraisiers
@@ -425,7 +437,9 @@
 - Couverture: outdoor
 - Courts: outdoor court (1)
 - Adresse: Avenue du Curé-Baud 84, 1212 Grand-Lancy
-- Notes: The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.
+- Réservation: [https://tcfraisiers.plugin.ch/?sport=301](<https://tcfraisiers.plugin.ch/?sport=301>)
+- Plateforme: Plugin.ch
+- Notes: The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but access, booking, account and membership requirements, and alias identity remain unknown; public availability does not establish anonymous booking. Landagora's 2023 cession notice and the lack of current operator confirmation remain relevant.
 
 ### EHL Padel Club \(Lausanne\)
 - Location ID: ehl-padel-club
@@ -472,7 +486,9 @@
 - Couverture: outdoor
 - Courts: outdoor courts (2)
 - Adresse: Route de Vaytay 11, 1295 Mies
-- Notes: The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. Access and booking are unknown.
+- Réservation: [https://tcmt.plugin.ch/user/diary](<https://tcmt.plugin.ch/user/diary>)
+- Plateforme: Plugin.ch
+- Notes: The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.
 
 ### Green Club \(Romanel-sur-Lausanne\)
 - Location ID: green-club
@@ -498,21 +514,21 @@
 - Candidate asphalte-jonction: matched -> asphalte-jonction (The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.)
 - Candidate bernex: unresolved -> bernex (The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.)
 - Candidate cherpines: matched -> cherpines (The commune supports the court count, public access, reservation, equipment rental, and locker-room information. The page does not provide a street address, cover classification, membership rule, or account requirement.)
-- Candidate collonge-bellerive: matched -> collonge-bellerive (Only regional directory address, court, and cover facts are retained. Current club identity, access, booking, rental, locker, and account details are unknown.)
-- Candidate cologny: matched -> cologny (Only regional directory address, court, and cover facts are retained. Access, group conditions, booking, rental, locker, and account details are unknown.)
-- Candidate crans-vd: matched -> crans-vd (The checked directory supports only the Crans address, court count, and outdoor classification. Access, booking, rentals, lockers, and account requirements are unknown.)
-- Candidate csu-champel: matched -> csu-champel (The regional directory supports only the address, one-court count, and outdoor classification. University eligibility, membership, public booking, and other facility details are unknown.)
+- Candidate collonge-bellerive: matched -> collonge-bellerive (Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but current club identity, access, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
+- Candidate cologny: matched -> cologny (Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but access, group conditions, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
+- Candidate crans-vd: matched -> crans-vd (The checked directory supports only the Crans address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. Rentals and locker details remain unknown.)
+- Candidate csu-champel: matched -> csu-champel (The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but university eligibility, membership, and account requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate david-lloyd-geneva: matched -> david-lloyd-geneva (Only regional directory address, court, and cover facts are retained. Membership and all booking/access details are unknown rather than inherited from the candidate list.)
-- Candidate drizia-miremont: unresolved -> drizia-miremont (The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.)
+- Candidate drizia-miremont: unresolved -> drizia-miremont (The checked directory supports only the Drizia-Miremont address and court facts. The public Plugin.ch diary is visible, but access, account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias.)
 - Candidate ehl-padel-club: matched -> ehl-padel-club (The checked directory supports only the address, two-court count, and outdoor classification. Campus eligibility, access, booking, rentals, lockers, and account requirements are unknown.)
 - Candidate evaux: matched -> evaux (The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement. The public Padel Connect grid is directly available at the verified Matchpoint URL; an account remains required for booking.)
 - Candidate everness: matched -> everness (The official page supports the venue address, online-only booking, and free racket rental. It does not state court count, cover, locker rooms, membership, account requirement, or booking platform; those fields are unknown.)
-- Candidate fraisiers: unresolved -> fraisiers (The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.)
-- Candidate gland: matched -> gland (The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. Access and booking are unknown.)
+- Candidate fraisiers: unresolved -> fraisiers (The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but access, booking, account and membership requirements, and alias identity remain unknown; public availability does not establish anonymous booking. Landagora's 2023 cession notice and the lack of current operator confirmation remain relevant.)
+- Candidate gland: matched -> gland (The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate green-club: matched -> green-club (Only regional directory address, court grouping, and cover facts are retained. The official page was not successfully fetched in this pass; access and booking are unknown.)
 - Candidate gva-palexpo: unresolved -> gva-palexpo (The operator's current 2026 page wins the three-versus-two court conflict and establishes seasonal operation. The regional two-court observation remains as explicit contradictory evidence. Access, membership, rental, locker, and account requirements are unknown.)
 - Candidate maisonnex: matched -> maisonnex (The former Meyrin commune URL returned 404 and is removed. The live Bookinea portal confirms a current Maisonnex-related padel reservation route, Padel 90 minutes at CHF 60.00, a CHF 15.00 guest padel ticket, and conditional guest access, but does not state the court count, address, cover, rentals, or locker-room facts. The record is therefore probable.)
-- Candidate mies-tannay: matched -> mies-tannay (The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. Access and booking are unknown.)
+- Candidate mies-tannay: matched -> mies-tannay (The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate padel-one-echandens: matched -> padel-one-echandens (The operator supports the address, doubles/single court grouping, reservation route, and changing facilities. Access, membership, racket rental, and account requirements are unknown.)
 - Candidate padel-parc-etoy: matched -> padel-parc-etoy (The operator supports the address, three indoor courts, Playtomic booking, equipment rental, and changing rooms. Access, membership, and account requirements are unknown.)
 - Candidate padel-parc-preverenges: matched -> padel-parc-preverenges (The operator supports the address, three indoor courts, Playtomic booking, equipment rental, and changing rooms. Access, membership, and account requirements are unknown.)
@@ -529,24 +545,24 @@ Unknown values are rendered as `Inconnu`.
 - Court de padel / TC Bernex \(Bernex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Everness \(Chavannes-de-Bogis\): access_kind, booking_account_required, booking_platform, brand, court_groups, locker_rooms, membership_required, overall_cover_status
 - Padel Station \(Chêne-Bourg\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
-- Padel de Collonge-Bellerive \(Collonge-Bellerive\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Centre sportif de Cologny \(Cologny\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Tennis Padel Crans VD \(Crans-près-Céligny\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Padel de Collonge-Bellerive \(Collonge-Bellerive\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Centre sportif de Cologny \(Cologny\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Tennis Padel Crans VD \(Crans-près-Céligny\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Padel One Echandens \(Echandens\): access_kind, booking_account_required, brand, membership_required, racket_rental
 - Padel Parc Etoy \(Etoy\): access_kind, booking_account_required, brand, membership_required
 - AIRPAD Les Acacias \(Genève\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
-- CSU Champel \(Genève\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Drizia-Miremont / Bout-du-Monde \(Genève\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- CSU Champel \(Genève\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Drizia-Miremont / Bout-du-Monde \(Genève\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - L'Asphalte / Pointe de la Jonction \(Genève\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
-- Padel Tennis Gland \(Gland\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Padel Tennis Gland \(Gland\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - GVA Padel / Palexpo \(Grand-Saconnex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - AIRPAD La Praille \(Lancy\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
-- Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - EHL Padel Club \(Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Urban Padel Lausanne \(Lausanne\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - AIRPAD Meyrin \(Meyrin\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - Centre sportif de Maisonnex \(Meyrin\): address, booking_account_required, brand, court_groups, locker_rooms, membership_required, official_url, overall_cover_status, racket_rental
-- Tennis Club Mies-Tannay \(Mies\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
+- Tennis Club Mies-Tannay \(Mies\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Padel des Evaux \(Onex\): brand, membership_required
 - AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - Centre sportif des Cherpines \(Plan-les-Ouates\): address, booking_account_required, brand, membership_required, overall_cover_status
@@ -558,8 +574,8 @@ Unknown values are rendered as `Inconnu`.
 ## Source evidence and contradictions
 ### Unresolved candidates
 - bernex: The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.
-- drizia-miremont: The checked directory supports only the Drizia-Miremont address and court facts. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias; access and booking are unknown.
-- fraisiers: The regional directory supports only the address, one-court count, and outdoor classification. Landagora's 2023 cession notice and the lack of current operator confirmation mean access, booking, and alias identity remain unknown.
+- drizia-miremont: The checked directory supports only the Drizia-Miremont address and court facts. The public Plugin.ch diary is visible, but access, account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias.
+- fraisiers: The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but access, booking, account and membership requirements, and alias identity remain unknown; public availability does not establish anonymous booking. Landagora's 2023 cession notice and the lack of current operator confirmation remain relevant.
 - gva-palexpo: The operator's current 2026 page wins the three-versus-two court conflict and establishes seasonal operation. The regional two-court observation remains as explicit contradictory evidence. Access, membership, rental, locker, and account requirements are unknown.
 ### Sources
 - Everness \(Chavannes-de-Bogis\): [PADEL – everness](<https://everness.ch/fr/padel/>) — location.address — supports; The operator gives Ch des Champs-Blancs 70B, 1279 Chavannes-de-Bogis. (vérifié: 2026-09-21T00:00:00Z)
@@ -687,6 +703,10 @@ Unknown values are rendered as `Inconnu`.
 - Vaudoise aréna \(Prilly\): [Vaudoise aréna · Playtomic](<https://playtomic.com/clubs/vaudoise-arena>) — location.booking\_platform — supports; The venue's booking service is Playtomic. (vérifié: 2026-09-21T00:00:00Z)
 - Padel Station \(Chêne-Bourg\): [Padel Station · Playtomic](<https://playtomic.com/fr/clubs/padel-station1>) — location.booking\_url — supports; The venue's public Playtomic listing is the linked booking route. (vérifié: 2026-09-21T00:00:00Z)
 - Vaudoise aréna \(Prilly\): [Vaudoise aréna · Playtomic](<https://playtomic.io/vaudoise-arena/53b5aaf2-7449-4691-96f8-a582ce37144b?q=PADEL~2025-03-17~~~>) — location.booking\_url — supports; The official page's reservation link points to the Vaudoise aréna Playtomic route. (vérifié: 2026-09-21T00:00:00Z)
+- Centre sportif de Cologny \(Cologny\): [Plugin.ch public booking diary](<https://reservation.cs-cologny.ch/diary>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Centre sportif de Cologny \(Cologny\): [Plugin.ch public booking diary](<https://reservation.cs-cologny.ch/diary>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- Padel de Collonge-Bellerive \(Collonge-Bellerive\): [Plugin.ch public booking diary](<https://reservation.tccb.ch/diary>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Padel de Collonge-Bellerive \(Collonge-Bellerive\): [Plugin.ch public booking diary](<https://reservation.tccb.ch/diary>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.access\_kind — supports; The current portal lists individual padel reservations and separate guest tickets restricted to holders of a valid padel package, establishing conditional access. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.booking\_platform — supports; The portal identifies itself as Bookinea. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.booking\_url — supports; The live Meyrin Sports booking portal lists padel reservations. (vérifié: 2026-09-21T00:00:00Z)
@@ -694,6 +714,18 @@ Unknown values are rendered as `Inconnu`.
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.municipality — supports; The current booking portal identifies the service as Meyrin Sports. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.price — supports; The portal lists Padel 90 minutes at CHF 60.00 and Entrée individuelle Invité Padel at CHF 15.00. (vérifié: 2026-09-21T00:00:00Z)
 - Centre sportif de Maisonnex \(Meyrin\): [Meyrin Sports \| Bookinea](<https://shop.bookinea.app/fr/meyrin-sports>) — location.public\_booking — supports; The current portal lists Padel 90 minutes reservation. (vérifié: 2026-09-21T00:00:00Z)
+- Tennis Padel Crans VD \(Crans-près-Céligny\): [Plugin.ch public booking diary](<https://tccrans.plugin.ch/user/diary>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Tennis Padel Crans VD \(Crans-près-Céligny\): [Plugin.ch public booking diary](<https://tccrans.plugin.ch/user/diary>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- Drizia-Miremont / Bout-du-Monde \(Genève\): [Plugin.ch public booking diary](<https://tcdrizia.plugin.ch/>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Drizia-Miremont / Bout-du-Monde \(Genève\): [Plugin.ch public booking diary](<https://tcdrizia.plugin.ch/>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): [Plugin.ch public booking diary](<https://tcfraisiers.plugin.ch/?sport=301>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): [Plugin.ch public booking diary](<https://tcfraisiers.plugin.ch/?sport=301>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- Padel Tennis Gland \(Gland\): [Plugin.ch public booking diary](<https://tcgland.plugin.ch/user/diary>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Padel Tennis Gland \(Gland\): [Plugin.ch public booking diary](<https://tcgland.plugin.ch/user/diary>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- Tennis Club Mies-Tannay \(Mies\): [Plugin.ch public booking diary](<https://tcmt.plugin.ch/user/diary>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- Tennis Club Mies-Tannay \(Mies\): [Plugin.ch public booking diary](<https://tcmt.plugin.ch/user/diary>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
+- CSU Champel \(Genève\): [Plugin.ch public booking diary](<https://unige.plugin.ch/>) — location.booking\_platform — supports; The booking diary is provided by Plugin.ch; account and membership requirements for booking remain unknown. (vérifié: 2026-09-26T00:00:00Z)
+- CSU Champel \(Genève\): [Plugin.ch public booking diary](<https://unige.plugin.ch/>) — location.booking\_url — supports; The public Plugin.ch diary is visible at this route; public availability does not establish anonymous booking. (vérifié: 2026-09-26T00:00:00Z)
 - Urban Padel Lausanne \(Lausanne\): [Accueil \| Urban Padel](<https://urban-padel.ch/>) — location.booking\_url — supports; The official Urban Padel page links online booking to its Matchpoint tenant. (vérifié: 2026-09-25T00:00:00Z)
 - Urban Padel Lausanne \(Lausanne\): [Urban Padel Lausanne public booking grid](<https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_platform — supports; The booking portal footer identifies Matchpoint as the scheduling software. (vérifié: 2026-09-25T00:00:00Z)
 - Urban Padel Lausanne \(Lausanne\): [Urban Padel Lausanne public booking grid](<https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_url — supports; The public Matchpoint tenant displays the Padel schedule with four courts. (vérifié: 2026-09-25T00:00:00Z)

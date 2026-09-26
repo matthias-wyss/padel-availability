@@ -312,6 +312,37 @@ def test_matchpoint_locations_have_current_booking_evidence() -> None:
         assert {"location.booking_url", "location.booking_platform"} <= supporting_facts
 
 
+def test_plugin_locations_have_current_booking_evidence() -> None:
+    locations = {
+        location.location_id: location
+        for location in load_locations(Path("data/verified_locations.json"))
+    }
+    expected = {
+        "cologny": ("https://reservation.cs-cologny.ch/diary", "Plugin.ch"),
+        "collonge-bellerive": ("https://reservation.tccb.ch/diary", "Plugin.ch"),
+        "crans-vd": ("https://tccrans.plugin.ch/user/diary", "Plugin.ch"),
+        "csu-champel": ("https://unige.plugin.ch/", "Plugin.ch"),
+        "drizia-miremont": ("https://tcdrizia.plugin.ch/", "Plugin.ch"),
+        "fraisiers": ("https://tcfraisiers.plugin.ch/?sport=301", "Plugin.ch"),
+        "gland": ("https://tcgland.plugin.ch/user/diary", "Plugin.ch"),
+        "mies-tannay": ("https://tcmt.plugin.ch/user/diary", "Plugin.ch"),
+    }
+    for location_id, (booking_url, booking_platform) in expected.items():
+        location = locations[location_id]
+        assert location.booking_url == booking_url
+        assert location.booking_platform == booking_platform
+        assert {
+            "location.booking_url",
+            "location.booking_platform",
+        } <= {
+            item.fact_key
+            for item in location.evidence
+            if item.relation == "supports"
+            and item.url == booking_url
+            and item.checked_at == "2026-09-26T00:00:00Z"
+        }
+
+
 def test_published_price_and_duration_evidence_is_source_backed() -> None:
     locations = {
         location.location_id: location

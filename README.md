@@ -97,6 +97,20 @@ they are not bypassed. Each outcome is persisted locally, and an `error` or
 `unavailable` outcome keeps the previous successful snapshot as stale rather
 than replacing its slots.
 
+Collect the public Plugin.ch availability diaries manually:
+
+```bash
+uv run padel-availability collect-plugin \
+  --database var/catalog.sqlite3 \
+  --sources data/plugin_sources.json \
+  --days 14
+```
+
+This command is manual, sequential, public, and read-only. It does not log in
+or reserve; public diary visibility does not imply anonymous booking. Each
+outcome is persisted locally, and an `error` outcome keeps the previous
+successful snapshot as stale rather than replacing its slots.
+
 Collect the public Padel First Vernier availability scheduler manually:
 
 ```bash
