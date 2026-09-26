@@ -57,11 +57,12 @@ Use a `.json` output path for a machine-readable report.
 
 ## Manual Availability Collection
 
-Install the optional browser tools and Chromium once:
+Install the optional browser tools and Chromium once. On Linux, `--with-deps`
+installs system packages and may require administrator privileges:
 
 ```bash
-uv sync --group browser
-uv run playwright install chromium
+uv sync --dev --group browser
+uv run playwright install --with-deps chromium
 ```
 
 Collect the public Playtomic availability snapshot manually:
@@ -93,6 +94,44 @@ This command reads the public Plugin.ch grid and is sequential, read-only, and
 manual. Browser state is ephemeral and is not saved between runs. It never logs
 in or reserves. Other portals without public availability remain unsupported;
 they are not bypassed. Each outcome is persisted locally, and an `error` or
+`unavailable` outcome keeps the previous successful snapshot as stale rather
+than replacing its slots.
+
+Collect the public Padel First Vernier availability scheduler manually:
+
+```bash
+uv run padel-availability collect-padelfirst \
+  --database var/catalog.sqlite3 \
+  --sources data/padelfirst_sources.json \
+  --days 14
+```
+
+This command reads the visible public Vernier scheduler and is sequential,
+read-only, and manual. Browser state is ephemeral; it never logs in, reserves,
+or opens payment. Login links shown in the public navigation are not used.
+Each outcome is persisted locally, and an `error` or `unavailable` outcome
+keeps the previous successful snapshot as stale rather than replacing its
+slots.
+
+Collect the public Matchpoint schedules for Jonction, Bernex, Parc des Evaux,
+and Urban Padel Lausanne manually:
+
+```bash
+uv run padel-availability collect-matchpoint \
+  --database var/catalog.sqlite3 \
+  --sources data/matchpoint_sources.json \
+  --days 14
+```
+
+This reads only the visible public court grids. It is sequential and read-only:
+it does not log in, use private endpoints, click booking slots, reserve, or
+persist participant names. If the optional-cookie notice blocks date controls,
+it uses the visible Decline choice only; it never accepts optional cookies or
+retains consent state between runs. Open matches count as occupied courts. The
+Evaux and Jonction sources use the public center selectors `id=8` and `id=9`;
+`club=Evaux` and `club=Jonction` are not valid selectors. This activation covers
+exactly the four entries in `data/matchpoint_sources.json`; the other
+unconfigured booking platforms are deferred. Each outcome is persisted locally, and an `error` or
 `unavailable` outcome keeps the previous successful snapshot as stale rather
 than replacing its slots.
 

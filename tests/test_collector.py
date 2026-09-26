@@ -1,8 +1,10 @@
+import importlib
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from operator import attrgetter
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
@@ -17,7 +19,13 @@ from padel_availability.availability import (
     AvailabilitySlot,
     local_window,
 )
-from padel_availability.collector import collect_airpad, collect_everness, collect_playtomic
+from padel_availability.collector import (
+    CollectionOutcome,
+    collect_airpad,
+    collect_everness,
+    collect_padelfirst,
+    collect_playtomic,
+)
 from padel_availability.connectors.airpad import (
     AirpadSource,
     AirpadSourceError,
@@ -35,6 +43,22 @@ from padel_availability.connectors.everness import (
 from padel_availability.connectors.everness_browser import (
     EvernessBrowserConnectorFactory,
     EvernessBrowserError,
+)
+from padel_availability.connectors.matchpoint import (
+    MatchpointSource,
+    load_matchpoint_sources,
+)
+from padel_availability.connectors.matchpoint_browser import (
+    MatchpointBrowserConnectorFactory,
+    MatchpointBrowserError,
+)
+from padel_availability.connectors.padelfirst import (
+    PadelFirstSource,
+    load_padelfirst_sources,
+)
+from padel_availability.connectors.padelfirst_browser import (
+    PadelFirstBrowserConnectorFactory,
+    PadelFirstBrowserError,
 )
 from padel_availability.connectors.playtomic import (
     PlaytomicSource,
@@ -208,6 +232,120 @@ def ready_everness_database(tmp_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def padelfirst_location() -> LocationRecord:
+    return next(
+        location
+        for location in load_locations(ROOT / "data/verified_locations.json")
+        if location.location_id == "vernier"
+    )
+
+
+def padelfirst_sources() -> tuple[PadelFirstSource, ...]:
+    return load_padelfirst_sources(ROOT / "data/padelfirst_sources.json")
+
+
+def ready_padelfirst_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "catalog.sqlite3")
+    initialize(connection)
+    candidates = load_candidates(ROOT / "data/candidates.json")
+    insert_candidates(
+        connection,
+        tuple(candidate for candidate in candidates if candidate.candidate_id == "vernier"),
+    )
+    upsert_location(connection, padelfirst_location())
+    return connection
+
+
+def matchpoint_locations() -> tuple[LocationRecord, ...]:
+    locations = load_locations(ROOT / "data/verified_locations.json")
+    by_id = {location.location_id: location for location in locations}
+    return tuple(
+        by_id[location_id]
+        for location_id in (
+            "asphalte-jonction",
+            "bernex",
+            "evaux",
+            "urban-padel-lausanne",
+        )
+    )
+
+
+def matchpoint_sources() -> tuple[MatchpointSource, ...]:
+    return load_matchpoint_sources(ROOT / "data/matchpoint_sources.json")
+
+
+def ready_matchpoint_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "catalog.sqlite3")
+    initialize(connection)
+    locations = matchpoint_locations()
+    candidate_ids = {
+        candidate_id for location in locations for candidate_id in location.candidate_ids
+    }
+    candidates = load_candidates(ROOT / "data/candidates.json")
+    insert_candidates(
+        connection,
+        tuple(candidate for candidate in candidates if candidate.candidate_id in candidate_ids),
+    )
+    for location in locations:
+        upsert_location(connection, location)
+    return connection
+
+
+def _collect_matchpoint(
+    connection: sqlite3.Connection,
+    locations: Sequence[LocationRecord],
+    sources: Sequence[MatchpointSource],
+    *,
+    now: datetime | None = None,
+    horizon_days: int = 14,
+    location_id: str | None = None,
+    browser_connector_factory: MatchpointBrowserConnectorFactory | None = None,
+) -> tuple[CollectionOutcome, ...]:
+    collector_module = importlib.import_module("padel_availability.collector")
+    collect = cast(
+        Callable[..., tuple[CollectionOutcome, ...]],
+        attrgetter("collect_matchpoint")(collector_module),
+    )
+    return collect(
+        connection,
+        locations,
+        sources,
+        now=now,
+        horizon_days=horizon_days,
+        location_id=location_id,
+        browser_connector_factory=browser_connector_factory,
+    )
+
+
+def _matchpoint_result(
+    location: LocationRecord,
+    source: MatchpointSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "matchpoint_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
+    )
+
+
 def fixture_fetch_json(url: str) -> object:
     location_id = urlparse(url).path.rsplit("/", 1)[-1]
     return read_fixture(location_id)
@@ -302,9 +440,7 @@ def test_airpad_collection_runs_all_four_sites(tmp_path: Path) -> None:
 def test_airpad_collection_rejects_missing_catalog_location(tmp_path: Path) -> None:
     connection = ready_airpad_database(tmp_path)
     locations = tuple(
-        location
-        for location in four_airpad_locations()
-        if location.location_id != "airpad-meyrin"
+        location for location in four_airpad_locations() if location.location_id != "airpad-meyrin"
     )
 
     try:
@@ -358,7 +494,9 @@ def test_airpad_collection_selects_one_site_and_uses_zurich_window(tmp_path: Pat
                 calls.append(location.location_id)
                 return airpad_result(
                     location,
-                    next(source for source in sources if source.location_id == location.location_id),
+                    next(
+                        source for source in sources if source.location_id == location.location_id
+                    ),
                     run_id=run_id,
                     window_start=window_start,
                     window_end=window_end,
@@ -544,7 +682,9 @@ def test_airpad_browser_opens_once_and_closes_after_collection(tmp_path: Path) -
                 collected_at: str,
             ) -> AvailabilityResult:
                 assert lifecycle == ["open"]
-                source = next(source for source in sources if source.location_id == location.location_id)
+                source = next(
+                    source for source in sources if source.location_id == location.location_id
+                )
                 return airpad_result(
                     location,
                     source,
@@ -633,6 +773,35 @@ def everness_result(
             run_id,
             location.location_id,
             "everness_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
+    )
+
+
+def padelfirst_result(
+    location: LocationRecord,
+    source: PadelFirstSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "padelfirst_browser",
             source.booking_url,
             window_start.isoformat(),
             window_end.isoformat(),
@@ -923,6 +1092,264 @@ def test_everness_collection_persists_startup_error(tmp_path: Path) -> None:
         assert outcomes[0].status == "error"
         assert outcomes[0].error == "browser startup failed"
         assert len(list_availability_runs(connection)) == 1
+    finally:
+        connection.close()
+
+
+def test_padelfirst_collection_uses_exact_location_and_zurich_window(tmp_path: Path) -> None:
+    connection = ready_padelfirst_database(tmp_path)
+    location = padelfirst_location()
+    sources = padelfirst_sources()
+    observed: list[tuple[date, date, str]] = []
+    factory_sources: list[Sequence[PadelFirstSource]] = []
+
+    def browser_factory(received_sources: Sequence[PadelFirstSource]):
+        factory_sources.append(received_sources)
+
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                observed.append((window_start, window_end, collected_at))
+                return padelfirst_result(
+                    received_location,
+                    sources[0],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_padelfirst(
+            connection,
+            (location,),
+            sources,
+            now=datetime(2026, 9, 22, 23, 30, tzinfo=UTC),
+            horizon_days=2,
+            browser_connector_factory=cast(PadelFirstBrowserConnectorFactory, browser_factory),
+        )
+
+        assert factory_sources == [sources]
+        assert observed == [(date(2026, 9, 23), date(2026, 9, 25), "2026-09-22T23:30:00Z")]
+        assert outcomes[0].location_id == "vernier"
+        assert outcomes[0].status == "success"
+        assert len(list_availability_runs(connection)) == 1
+    finally:
+        connection.close()
+
+
+def test_padelfirst_collection_persists_startup_error(tmp_path: Path) -> None:
+    connection = ready_padelfirst_database(tmp_path)
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[PadelFirstSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise PadelFirstBrowserError("browser startup failed")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(self, *args: object, **kwargs: object) -> AvailabilityResult:
+                del args, kwargs
+                raise AssertionError("collect should not run after browser startup failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_padelfirst(
+            connection,
+            (padelfirst_location(),),
+            padelfirst_sources(),
+            browser_connector_factory=cast(PadelFirstBrowserConnectorFactory, browser_factory),
+        )
+
+        assert lifecycle == ["open", "close"]
+        assert outcomes[0].status == "error"
+        assert outcomes[0].error == "browser startup failed"
+        assert len(list_availability_runs(connection)) == 1
+    finally:
+        connection.close()
+
+
+def test_padelfirst_collection_persists_playwright_startup_error(tmp_path: Path) -> None:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError as error:
+        pytest.skip(f"Playwright is unavailable: {error}")
+
+    connection = ready_padelfirst_database(tmp_path)
+
+    def browser_factory(_: Sequence[PadelFirstSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                raise PlaywrightError("browser startup failed")
+
+            def close(self) -> None:
+                pass
+
+            def collect(self, *args: object, **kwargs: object) -> AvailabilityResult:
+                del args, kwargs
+                raise AssertionError("collect should not run after browser startup failed")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_padelfirst(
+            connection,
+            (padelfirst_location(),),
+            padelfirst_sources(),
+            browser_connector_factory=cast(PadelFirstBrowserConnectorFactory, browser_factory),
+        )
+
+        assert outcomes[0].status == "error"
+        assert outcomes[0].error == "browser startup failed"
+        assert len(list_availability_runs(connection)) == 1
+    finally:
+        connection.close()
+
+
+def test_padelfirst_collection_rejects_unknown_location(tmp_path: Path) -> None:
+    connection = ready_padelfirst_database(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="unknown Padel First location: everness"):
+            collect_padelfirst(
+                connection,
+                (padelfirst_location(),),
+                padelfirst_sources(),
+                location_id="everness",
+            )
+    finally:
+        connection.close()
+
+
+def test_matchpoint_collection_uses_exact_locations_and_zurich_window(tmp_path: Path) -> None:
+    connection = ready_matchpoint_database(tmp_path)
+    locations = matchpoint_locations()
+    sources = matchpoint_sources()
+    factory_sources: list[Sequence[MatchpointSource]] = []
+    events: list[str] = []
+    collected: list[tuple[str, date, date]] = []
+    sources_by_id = {source.location_id: source for source in sources}
+
+    def browser_factory(received_sources: Sequence[MatchpointSource]):
+        factory_sources.append(received_sources)
+
+        class FakeMatchpointConnector:
+            def open(self) -> None:
+                events.append("open")
+
+            def close(self) -> None:
+                events.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                events.append(f"collect:{location.location_id}")
+                collected.append((location.location_id, window_start, window_end))
+                return _matchpoint_result(
+                    location,
+                    sources_by_id[location.location_id],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeMatchpointConnector()
+
+    try:
+        outcomes = _collect_matchpoint(
+            connection,
+            locations,
+            sources,
+            now=datetime(2026, 9, 24, 22, 30, tzinfo=UTC),
+            horizon_days=2,
+            browser_connector_factory=cast(MatchpointBrowserConnectorFactory, browser_factory),
+        )
+
+        assert events == [
+            "open",
+            "collect:asphalte-jonction",
+            "collect:bernex",
+            "collect:evaux",
+            "collect:urban-padel-lausanne",
+            "close",
+        ]
+        assert factory_sources == [sources]
+        assert collected == [
+            ("asphalte-jonction", date(2026, 9, 25), date(2026, 9, 27)),
+            ("bernex", date(2026, 9, 25), date(2026, 9, 27)),
+            ("evaux", date(2026, 9, 25), date(2026, 9, 27)),
+            ("urban-padel-lausanne", date(2026, 9, 25), date(2026, 9, 27)),
+        ]
+        assert [outcome.location_id for outcome in outcomes] == [
+            "asphalte-jonction",
+            "bernex",
+            "evaux",
+            "urban-padel-lausanne",
+        ]
+        assert all(outcome.status == "success" for outcome in outcomes)
+        assert len(list_availability_runs(connection)) == 4
+    finally:
+        connection.close()
+
+
+def test_matchpoint_collection_persists_browser_startup_error_and_closes(
+    tmp_path: Path,
+) -> None:
+    connection = ready_matchpoint_database(tmp_path)
+    events: list[str] = []
+
+    def browser_factory(_: Sequence[MatchpointSource]):
+        class FakeMatchpointConnector:
+            def open(self) -> None:
+                events.append("open")
+                raise MatchpointBrowserError("browser startup failed")
+
+            def close(self) -> None:
+                events.append("close")
+
+            def collect(self, *args: object, **kwargs: object) -> AvailabilityResult:
+                del args, kwargs
+                raise AssertionError("collect must not run after browser startup failure")
+
+        return FakeMatchpointConnector()
+
+    try:
+        outcomes = _collect_matchpoint(
+            connection,
+            matchpoint_locations(),
+            matchpoint_sources(),
+            browser_connector_factory=cast(MatchpointBrowserConnectorFactory, browser_factory),
+        )
+
+        assert events == ["open", "close"]
+        assert [outcome.status for outcome in outcomes] == ["error"] * 4
+        assert [outcome.error for outcome in outcomes] == ["browser startup failed"] * 4
+        assert len(list_availability_runs(connection)) == 4
     finally:
         connection.close()
 
