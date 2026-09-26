@@ -1,10 +1,30 @@
 import re
-from collections.abc import Mapping
-from datetime import UTC, date, datetime, time
-from typing import cast
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Protocol, Self, cast
 from zoneinfo import ZoneInfo
 
-from .playtomic_browser import BrowserSlotObservation
+from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot
+from ..models import LocationRecord
+from .playtomic import PlaytomicSourceError
+from .playtomic_browser import (
+    BrowserFactory,
+    BrowserSlotObservation,
+    _is_documented_browser_error,  # pyright: ignore[reportPrivateUsage]
+    default_browser_factory,
+    parse_browser_observations,
+)
+from .plugin import PluginSource, PluginSourceError
+
+__all__ = [
+    "PluginBrowserConnector",
+    "PluginBrowserConnectorFactory",
+    "PluginBrowserError",
+    "parse_plugin_dom",
+]
+
+_PLUGIN_TIMEOUT_MS = 15_000
 
 _ZURICH = ZoneInfo("Europe/Zurich")
 _PAYLOAD_FIELDS = {
@@ -138,12 +158,296 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
 }
 """
 
+_PLUGIN_NEXT_CONTROL_SCRIPT = r"""
+() => {
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    for (let current = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 ||
+          current.getAttribute('aria-hidden') === 'true') return false;
+    }
+    return true;
+  };
+  const controls = Array.from(document.querySelectorAll(
+    '.header_date button, .header_date a, .header_date [role="button"]'
+  )).filter(visible).filter(element => {
+    const label = [element.innerText, element.getAttribute('aria-label'), element.title]
+      .filter(Boolean).join(' ').toLocaleLowerCase();
+    return /next|following|demain|suivant|siguiente|›|→|chevron_right/.test(label);
+  });
+  if (controls.length > 1) return '!ambiguous';
+  if (!controls.length) return '';
+  const element = controls[0];
+  const label = element.getAttribute('aria-label');
+  if (label) return `${element.tagName.toLocaleLowerCase()}[aria-label=${JSON.stringify(label)}]`;
+  const title = element.title;
+  if (title) return `${element.tagName.toLocaleLowerCase()}[title=${JSON.stringify(title)}]`;
+  const text = (element.innerText || '').trim();
+  return text ? `${element.tagName.toLocaleLowerCase()}:has-text(${JSON.stringify(text)})` : '';
+}
+"""
 
-class PluginBrowserError(ValueError):
+_PLUGIN_COOKIE_CONTROL_SCRIPT = r"""
+() => {
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    for (let current = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 ||
+          current.getAttribute('aria-hidden') === 'true') return false;
+    }
+    return true;
+  };
+  const controls = Array.from(document.querySelectorAll('button, input[type="button"], [role="button"]'))
+    .filter(visible).filter(element => {
+      const label = [element.innerText, element.value, element.getAttribute('aria-label'), element.title]
+        .filter(Boolean).join(' ').toLocaleLowerCase();
+      return /decline|reject|refuser|refuse/.test(label);
+    });
+  if (controls.length > 1) return '!ambiguous';
+  if (!controls.length) return '';
+  const element = controls[0];
+  for (const attribute of ['aria-label', 'value', 'title']) {
+    const value = element.getAttribute(attribute);
+    if (value) return `${element.tagName.toLocaleLowerCase()}[${attribute}=${JSON.stringify(value)}]`;
+  }
+  const text = (element.innerText || '').trim();
+  return text ? `${element.tagName.toLocaleLowerCase()}:has-text(${JSON.stringify(text)})` : '';
+}
+"""
+
+
+class PluginBrowserError(PluginSourceError):
     """Raised when the visible public Plugin diary cannot be parsed safely."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message[:160])
+
+
+class _PluginLocator(Protocol):
+    def count(self) -> int: ...
+
+    def is_visible(self) -> bool: ...
+
+    def click(self) -> None: ...
+
+
+class _PluginPage(Protocol):
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
+
+    def locator(self, selector: str) -> _PluginLocator: ...
+
+    def wait_for_timeout(self, timeout: int) -> None: ...
+
+    def evaluate(self, expression: str, arg: object = None) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _PluginContext(Protocol):
+    def new_page(self) -> _PluginPage: ...
+
+    def close(self) -> None: ...
+
+
+class _PluginBrowser(Protocol):
+    def __enter__(self) -> Self: ...
+
+    def __exit__(self, *args: object) -> None: ...
+
+    def new_context(self) -> _PluginContext: ...
+
+
+def _visible_locator(page: _PluginPage, selector: str) -> _PluginLocator:
+    locator = page.locator(selector)
+    if locator.count() != 1 or not locator.is_visible():
+        raise PluginBrowserError("visible Plugin date control was not found")
+    return locator
+
+
+def _decline_optional_cookies(page: _PluginPage) -> None:
+    selector = page.evaluate(_PLUGIN_COOKIE_CONTROL_SCRIPT)
+    if selector is None or selector == "":
+        return
+    if selector == "!ambiguous":
+        raise PluginBrowserError("visible optional-cookie decline control is ambiguous")
+    if not isinstance(selector, str):
+        raise PluginBrowserError("visible optional-cookie control is invalid")
+    _visible_locator(page, selector).click()
+
+
+def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
+    courts, slots = dom.get("courts"), dom.get("slots")
+    if not isinstance(courts, list) or not courts or not isinstance(slots, list):
+        return False
+    court_labels = cast(list[object], courts)
+    if not all(isinstance(court, str) and court for court in court_labels):
+        return False
+    if dom.get("empty_grid") is True:
+        return not slots
+    if not slots:
+        return False
+    intervals: dict[tuple[str, str], set[str]] = {}
+    for slot in cast(list[object], slots):
+        if not isinstance(slot, Mapping):
+            return False
+        slot_dom = cast(Mapping[str, object], slot)
+        start, end, court = slot_dom.get("start"), slot_dom.get("end"), slot_dom.get("court")
+        if not all(isinstance(value, str) for value in (start, end, court)):
+            return False
+        intervals.setdefault((cast(str, start), cast(str, end)), set()).add(cast(str, court))
+    return bool(intervals) and all(
+        value == set(cast(list[str], court_labels)) for value in intervals.values()
+    )
+
+
+def _wait_for_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: int) -> object:
+    for _ in range(max(1, timeout_ms // 100)):
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        dom = _mapping(payload, "visible DOM")
+        if dom.get("authentication_visible") is True:
+            return payload
+        if (
+            dom.get("view") == "booking"
+            and dom.get("date") == requested_date.isoformat()
+            and dom.get("loading") is False
+            and _plugin_grid_ready(dom)
+        ):
+            return payload
+        page.wait_for_timeout(100)
+    raise PluginBrowserError("timed out waiting for the requested Plugin date")
+
+
+def _parse_plugin_observations(
+    observations: Sequence[BrowserSlotObservation],
+    *,
+    location_id: str,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+) -> tuple[AvailabilitySlot, ...]:
+    try:
+        return parse_browser_observations(
+            observations,
+            location_id=location_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+    except PlaytomicSourceError as error:
+        raise PluginBrowserError(str(error)) from error
+
+
+class PluginBrowserConnector:
+    def __init__(
+        self,
+        sources: Sequence[PluginSource],
+        *,
+        browser_factory: BrowserFactory = default_browser_factory,
+        timeout_ms: int = _PLUGIN_TIMEOUT_MS,
+    ) -> None:
+        self._sources = {source.location_id: source for source in sources}
+        self._browser_factory = browser_factory
+        self._timeout_ms = timeout_ms
+        self._browser: _PluginBrowser | None = None
+
+    def open(self) -> None:
+        if self._browser is not None:
+            return
+        session = self._browser_factory()
+        try:
+            browser = session.__enter__()
+        except BaseException:
+            session.__exit__(*sys.exc_info())
+            raise
+        self._browser = cast(_PluginBrowser, browser)
+
+    def close(self) -> None:
+        browser = self._browser
+        self._browser = None
+        if browser is not None:
+            browser.__exit__(None, None, None)
+
+    def collect(
+        self,
+        location: LocationRecord,
+        *,
+        run_id: str,
+        window_start: date,
+        window_end: date,
+        collected_at: str,
+    ) -> AvailabilityResult:
+        if window_end <= window_start:
+            raise PluginSourceError("requested date window is invalid")
+        source = self._sources.get(location.location_id)
+        if source is None:
+            raise PluginSourceError("no source metadata for location")
+        observations: list[BrowserSlotObservation] = []
+        try:
+            self.open()
+            browser = self._browser
+            if browser is None:
+                raise PluginBrowserError("browser session is not running")
+            context = browser.new_context()
+            try:
+                page = context.new_page()
+                try:
+                    page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
+                    _decline_optional_cookies(page)
+                    current_date = window_start
+                    payload = _wait_for_plugin_date(page, current_date, self._timeout_ms)
+                    while current_date < window_end:
+                        observations.extend(parse_plugin_dom(payload, current_date))
+                        current_date += timedelta(days=1)
+                        if current_date < window_end:
+                            selector = page.evaluate(_PLUGIN_NEXT_CONTROL_SCRIPT)
+                            if selector == "!ambiguous":
+                                raise PluginBrowserError("visible Plugin next-day control is ambiguous")
+                            if not isinstance(selector, str) or not selector:
+                                raise PluginBrowserError("visible Plugin next-day control was not found")
+                            _visible_locator(page, selector).click()
+                            payload = _wait_for_plugin_date(page, current_date, self._timeout_ms)
+                finally:
+                    page.close()
+            finally:
+                context.close()
+        except (PluginBrowserError, PluginSourceError):
+            self.close()
+            raise
+        except Exception as error:
+            self.close()
+            if _is_documented_browser_error(error):
+                raise PluginBrowserError("browser navigation or extraction failed") from error
+            raise
+        finally:
+            self.close()
+
+        slots = _parse_plugin_observations(
+            tuple(observations),
+            location_id=location.location_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        run = AvailabilityRun(
+            run_id,
+            location.location_id,
+            "plugin_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            "success",
+            None,
+        )
+        return AvailabilityResult(run, slots)
+
+
+PluginBrowserConnectorFactory = Callable[[Sequence[PluginSource]], PluginBrowserConnector]
 
 
 def _mapping(value: object, field: str) -> Mapping[str, object]:

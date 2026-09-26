@@ -1,18 +1,35 @@
-from datetime import date
+from __future__ import annotations
+
+from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Self, cast
 
 import pytest
 
+from padel_availability.connectors.playtomic_browser import BrowserFactory
+from padel_availability.connectors.plugin import PluginSource
 from padel_availability.connectors.plugin_browser import (
+    _PLUGIN_COOKIE_CONTROL_SCRIPT,
+    _PLUGIN_NEXT_CONTROL_SCRIPT,
     _PLUGIN_VISIBLE_DOM_SCRIPT,
+    PluginBrowserConnector,
     PluginBrowserError,
     parse_plugin_dom,
 )
+from padel_availability.inventory import load_locations
 
 FIXTURE = Path(__file__).parent / "fixtures" / "plugin" / "dom" / "plugin-diary.html"
 WEEKLY_FIXTURE = Path(__file__).parent / "fixtures" / "plugin" / "dom" / "plugin-weekly-diary.html"
 REQUESTED_DATE = date(2026, 9, 26)
+ROOT = Path(__file__).parents[1]
+SOURCE = PluginSource(
+    "cologny", "https://reservation.cs-cologny.ch/diary", "2026-09-26T00:00:00Z", "public"
+)
+LOCATION = next(
+    location
+    for location in load_locations(ROOT / "data/verified_locations.json")
+    if location.location_id == SOURCE.location_id
+)
 
 
 def _payload() -> dict[str, Any]:
@@ -29,6 +46,187 @@ def _payload() -> dict[str, Any]:
         "authentication_visible": False,
         "empty_grid": False,
     }
+
+
+class _FakePluginLocator:
+    def __init__(self, page: _FakePluginPage, selector: str) -> None:
+        self.page = page
+        self.selector = selector
+
+    def count(self) -> int:
+        if "next" in self.selector.casefold():
+            return 1
+        if "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
+            return int(self.page.cookie_visible)
+        return 0
+
+    def is_visible(self) -> bool:
+        return self.count() == 1
+
+    def click(self) -> None:
+        self.page.clicks.append(self.selector)
+        if "next" in self.selector.casefold():
+            self.page.current_date += timedelta(days=1)
+        elif "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
+            self.page.cookie_visible = False
+
+
+class _FakePluginPage:
+    def __init__(self, start: date = REQUESTED_DATE) -> None:
+        self.current_date = start
+        self.url = ""
+        self.closed = False
+        self.cookie_visible = False
+        self.clicks: list[str] = []
+        self.goto_args: list[tuple[str, str, int]] = []
+
+    def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
+        self.url = url
+        self.goto_args.append((url, wait_until, timeout))
+
+    def evaluate(self, script: str, _arg: object = None) -> Any:
+        if ".header_date button" in script:
+            return 'button[aria-label="Next day"]'
+        if "input[type=\"button\"]" in script:
+            return 'button[aria-label="Decline"]' if self.cookie_visible else ""
+        payload = _payload()
+        payload["date"] = self.current_date.isoformat()
+        return payload
+
+    def locator(self, selector: str) -> _FakePluginLocator:
+        return _FakePluginLocator(self, selector)
+
+    def wait_for_timeout(self, _timeout: int) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakePluginContext:
+    def __init__(self, page: _FakePluginPage) -> None:
+        self.page = page
+        self.closed = False
+
+    def new_page(self) -> _FakePluginPage:
+        return self.page
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakePluginBrowser:
+    def __init__(self, context: _FakePluginContext) -> None:
+        self.context = context
+        self.exited = False
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.exited = True
+
+    def new_context(self) -> _FakePluginContext:
+        return self.context
+
+
+def _connector(page: _FakePluginPage) -> tuple[PluginBrowserConnector, _FakePluginContext, _FakePluginBrowser]:
+    context = _FakePluginContext(page)
+    browser = _FakePluginBrowser(context)
+    connector = PluginBrowserConnector(
+        (SOURCE,), browser_factory=cast(BrowserFactory, lambda: browser)
+    )
+    return connector, context, browser
+
+
+def _collect(connector: PluginBrowserConnector, *, end: date) -> Any:
+    return connector.collect(
+        LOCATION,
+        run_id="run-plugin",
+        window_start=REQUESTED_DATE,
+        window_end=end,
+        collected_at="2026-09-26T00:00:00Z",
+    )
+
+
+def test_plugin_connector_uses_public_diary_and_visible_next_day_navigation() -> None:
+    page = _FakePluginPage()
+    connector, context, browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 28))
+    connector.close()
+
+    assert page.goto_args == [(SOURCE.booking_url, "commit", 15_000)]
+    assert len([click for click in page.clicks if "next" in click.casefold()]) == 1
+    assert all("booking" not in click.casefold() and "slot" not in click.casefold() for click in page.clicks)
+    assert page.closed and context.closed and browser.exited
+    assert len(result.slots) == 4
+
+
+def test_plugin_connector_rejects_authentication_and_closes_resources() -> None:
+    page = _FakePluginPage()
+    original_evaluate = page.evaluate
+
+    def evaluate(script: str, arg: object = None) -> Any:
+        payload = original_evaluate(script, arg)
+        if isinstance(payload, dict):
+            payload["authentication_visible"] = True
+        return payload
+
+    page.evaluate = evaluate  # type: ignore[method-assign]
+    connector, context, browser = _connector(page)
+
+    with pytest.raises(PluginBrowserError, match="authentication"):
+        _collect(connector, end=date(2026, 9, 27))
+    connector.close()
+
+    assert page.closed and context.closed and browser.exited
+
+
+def test_plugin_connector_rejects_wrong_activity_and_closes_resources() -> None:
+    page = _FakePluginPage()
+    original_evaluate = page.evaluate
+
+    def evaluate(script: str, arg: object = None) -> Any:
+        payload = original_evaluate(script, arg)
+        if isinstance(payload, dict):
+            payload["activity"] = "Tennis"
+        return payload
+
+    page.evaluate = evaluate  # type: ignore[method-assign]
+    connector, context, browser = _connector(page)
+
+    with pytest.raises(PluginBrowserError, match="activity"):
+        _collect(connector, end=date(2026, 9, 27))
+    connector.close()
+
+    assert page.closed and context.closed and browser.exited
+
+
+def test_plugin_connector_declines_optional_cookies_only_when_visible() -> None:
+    page = _FakePluginPage()
+    page.cookie_visible = True
+    connector, _context, _browser = _connector(page)
+
+    _collect(connector, end=date(2026, 9, 27))
+    connector.close()
+
+    assert len([click for click in page.clicks if "decline" in click.casefold()]) == 1
+
+
+def test_plugin_connector_persists_variable_dates_and_slot_states() -> None:
+    page = _FakePluginPage()
+    connector, _context, _browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 28))
+    connector.close()
+
+    assert [(slot.starts_at, slot.ends_at, slot.status) for slot in result.slots] == [
+        ("2026-09-26T07:00:00Z", "2026-09-26T08:30:00Z", "available"),
+        ("2026-09-26T07:00:00Z", "2026-09-26T08:30:00Z", "unavailable"),
+        ("2026-09-27T07:00:00Z", "2026-09-27T08:30:00Z", "available"),
+        ("2026-09-27T07:00:00Z", "2026-09-27T08:30:00Z", "unavailable"),
+    ]
 
 
 def test_parse_maps_states_and_keeps_variable_local_durations() -> None:
@@ -115,6 +313,8 @@ def test_fixture_is_a_sanitized_visible_diary_and_extracts_required_payload() ->
         page = browser.new_page()
         page.set_content(FIXTURE.read_text(encoding="utf-8"))
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        assert page.evaluate(_PLUGIN_NEXT_CONTROL_SCRIPT) == 'button[aria-label="Next day"]'
+        assert page.evaluate(_PLUGIN_COOKIE_CONTROL_SCRIPT) == ""
         browser.close()
 
     assert set(payload) == {
