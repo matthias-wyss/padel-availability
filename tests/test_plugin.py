@@ -124,3 +124,15 @@ def test_load_plugin_sources_rejects_malformed_json_with_bounded_error(tmp_path:
         load_plugin_sources(path)
 
     assert len(str(exc_info.value)) <= 160
+
+
+def test_load_plugin_sources_rejects_deeply_nested_json_with_bounded_error(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "sources.json"
+    path.write_text("[" * 10000 + "0" + "]" * 10000, encoding="utf-8")
+
+    with pytest.raises(PluginSourceError) as exc_info:
+        load_plugin_sources(path)
+
+    assert len(str(exc_info.value)) <= 160

@@ -52,7 +52,7 @@ class PluginSource:
 def load_plugin_sources(path: Path) -> tuple[PluginSource, ...]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError) as error:
         raise _source_error("could not read Plugin source manifest") from error
 
     if not isinstance(raw, dict):
