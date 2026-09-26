@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "sources": [
+    {
+      "location_id": "asphalte-jonction",
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "bernex",
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "evaux",
+      "booking_url": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "urban-padel-lausanne",
+      "booking_url": "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    }
+  ]
+}
