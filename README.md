@@ -107,9 +107,10 @@ uv run padel-availability collect-plugin \
 ```
 
 This command is manual, sequential, public, and read-only. It does not log in
-or reserve; public diary visibility does not imply anonymous booking. Each
-outcome is persisted locally, and an `error` outcome keeps the previous
-successful snapshot as stale rather than replacing its slots.
+or reserve; public diary visibility does not imply anonymous booking. Venue
+access, account, and membership requirements remain unknown unless separately
+verified. Each outcome is persisted locally, and an `error` outcome keeps the
+previous successful snapshot as stale rather than replacing its slots.
 
 Collect the public Padel First Vernier availability scheduler manually:
 
