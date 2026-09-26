@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "sources": [
+    {
+      "location_id": "cologny",
+      "booking_url": "https://reservation.cs-cologny.ch/diary",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "collonge-bellerive",
+      "booking_url": "https://reservation.tccb.ch/diary",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "crans-vd",
+      "booking_url": "https://tccrans.plugin.ch/user/diary",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "csu-champel",
+      "booking_url": "https://unige.plugin.ch/",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "drizia-miremont",
+      "booking_url": "https://tcdrizia.plugin.ch/",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "fraisiers",
+      "booking_url": "https://tcfraisiers.plugin.ch/?sport=301",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "gland",
+      "booking_url": "https://tcgland.plugin.ch/user/diary",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    },
+    {
+      "location_id": "mies-tannay",
+      "booking_url": "https://tcmt.plugin.ch/user/diary",
+      "checked_at": "2026-09-26T00:00:00Z",
+      "status": "public"
+    }
+  ]
+}

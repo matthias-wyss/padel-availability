@@ -44,12 +44,22 @@ from .playtomic_browser import (
     parse_browser_observations,
     parse_visible_dom,
 )
+from .plugin import (
+    PLUGIN_BOOKING_URLS,
+    PLUGIN_LOCATION_IDS,
+    PluginSource,
+    PluginSourceError,
+    PluginStatus,
+    load_plugin_sources,
+)
 
 __all__ = [
     "AIRPAD_LOCATION_IDS",
     "AIRPAD_LOCATION_LABELS",
     "EVERNESS_BOOKING_URL",
     "EVERNESS_LOCATION_IDS",
+    "PLUGIN_BOOKING_URLS",
+    "PLUGIN_LOCATION_IDS",
     "AirpadBrowserConnector",
     "AirpadBrowserConnectorFactory",
     "AirpadBrowserError",
@@ -70,11 +80,15 @@ __all__ = [
     "PlaytomicConnector",
     "PlaytomicSource",
     "PlaytomicSourceError",
+    "PluginSource",
+    "PluginSourceError",
+    "PluginStatus",
     "extract_browser_observations",
     "fetch_public_json",
     "load_airpad_sources",
     "load_everness_sources",
     "load_playtomic_sources",
+    "load_plugin_sources",
     "parse_browser_observations",
     "parse_playtomic_slots",
     "parse_visible_dom",
