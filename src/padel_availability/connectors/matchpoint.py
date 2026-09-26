@@ -24,6 +24,12 @@ MATCHPOINT_BOOKING_URLS = {
     "evaux": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8",
     "urban-padel-lausanne": "https://urbanpadellausanne.matchpoint.com.es/Booking/Grid.aspx",
 }
+MATCHPOINT_EXPECTED_CENTERS = {
+    "asphalte-jonction": "Jonction",
+    "bernex": "Bernex",
+    "evaux": "Parc des Evaux",
+    "urban-padel-lausanne": "Urban Padel Sàrl",
+}
 MATCHPOINT_LOCATION_IDS: frozenset[str] = frozenset(MATCHPOINT_BOOKING_URLS)
 
 
