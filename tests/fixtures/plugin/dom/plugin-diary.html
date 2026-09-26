@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Public weekly court diary</title>
+    <style>
+      body { font: 16px sans-serif; }
+      .date-nav { display: flex; gap: 1rem; }
+      table { border-collapse: collapse; }
+      td, th { border: 1px solid #aaa; min-width: 8rem; height: 2rem; }
+      .available { background: #e7f5e7; }
+      .booked { background: #f4dddd; }
+      .unknown { background: #eee; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header_date">
+        <nav class="date-nav" aria-label="Date navigation">
+          <button type="button" aria-label="Previous day">‹</button>
+          <span>2026-09-26</span>
+          <button type="button" aria-label="Next day">›</button>
+        </nav>
+      </div>
+      <label>Activity
+        <select class="sports-types">
+          <option selected>Padel</option>
+        </select>
+      </label>
+    </header>
+    <table class="reservation">
+      <thead><tr><th>Time</th><th>Court 1</th><th>Court 2</th></tr></thead>
+      <tbody>
+        <tr>
+          <th>09:00–10:00</th>
+          <td class="available">available</td>
+          <td class="booked">booked</td>
+        </tr>
+        <tr>
+          <th>10:00–11:00</th>
+          <td class="unknown">partially booked</td>
+          <td class="available">available</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
