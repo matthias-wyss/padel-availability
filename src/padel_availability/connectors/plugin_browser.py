@@ -59,7 +59,7 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     if (/^(available|free|open|libre|frei)$/.test(state)) return 'available';
     if (/^(booked|occupied|reserved|unavailable|réservé|besetzt)$/.test(state)) return 'unavailable';
     if (/^(unknown|partially booked|partially reserved|check availability|\?|notallowed)$/.test(state)) return 'unknown';
-    return state;
+    return state ? 'unrecognized' : '';
   };
   const addCourt = name => {
     if (name && !/^(sa|di|lu|ma|me|je|ve)\s+\d+$/i.test(name) && !courts.includes(name)) courts.push(name);
@@ -70,12 +70,10 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     addCourt(court);
     const start = (cell.getAttribute('heure') || '').trim();
     if (!court || !start) continue;
-    const stateText = (cell.matches('td.terrainTxt')
-      ? cell.querySelector('.event-time .start')?.innerText || '' : cell.innerText || '').trim();
+    const stateText = (cell.innerText || '').trim();
     const classNames = cell.className.toLocaleLowerCase();
     let state = stateOf(stateText);
     if (/notallowed/.test(classNames)) state = 'unknown';
-    else if (/^\d{2}:\d{2}$/.test(stateText)) state = 'unavailable';
     const step = Number((classNames.match(/time_(\d+)/) || [])[1]);
     const rowspan = Number(cell.getAttribute('rowspan') || 1);
     let endMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3)) + step * rowspan;
@@ -87,7 +85,7 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
         endMinutes = Number(nextHour.slice(0, 2)) * 60 + Number(nextHour.slice(3));
       }
     }
-    if (state && endMinutes > Number(start.slice(0, 2)) * 60 + Number(start.slice(3)) && /^\d{2}:\d{2}$/.test(start)) {
+    if (endMinutes > Number(start.slice(0, 2)) * 60 + Number(start.slice(3)) && /^\d{2}:\d{2}$/.test(start)) {
       slots.push({court, start, end: `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`, state});
     }
   }

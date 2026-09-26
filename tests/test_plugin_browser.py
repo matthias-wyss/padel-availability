@@ -149,7 +149,7 @@ def test_unrecognized_table_cell_label_is_not_guessed_as_booked() -> None:
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
         browser.close()
 
-    assert payload["slots"][0]["state"] == "maintenance"
+    assert payload["slots"][0]["state"] == "unrecognized"
     with pytest.raises(PluginBrowserError, match="state"):
         parse_plugin_dom(payload, REQUESTED_DATE)
 
@@ -168,6 +168,24 @@ def test_blank_table_cell_fails_closed_instead_of_becoming_available() -> None:
         browser.close()
 
     assert payload["slots"][0]["state"] == ""
+    with pytest.raises(PluginBrowserError, match="state"):
+        parse_plugin_dom(payload, REQUESTED_DATE)
+
+
+def test_time_only_terrain_cell_fails_closed_instead_of_becoming_unavailable() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".terrainTxt").first.evaluate(
+            "element => element.innerHTML = '<div class=event-time><span class=start>09:00</span></div>'"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "unrecognized"
     with pytest.raises(PluginBrowserError, match="state"):
         parse_plugin_dom(payload, REQUESTED_DATE)
 
@@ -206,7 +224,7 @@ def test_weekly_cell_with_unrecognized_visible_state_fails_closed() -> None:
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
         browser.close()
 
-    assert payload["slots"][0]["state"] == "maintenance"
+    assert payload["slots"][0]["state"] == "unrecognized"
     with pytest.raises(PluginBrowserError, match="state"):
         parse_plugin_dom(payload, REQUESTED_DATE)
 

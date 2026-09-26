@@ -8,9 +8,7 @@
       .date-nav { display: flex; gap: 1rem; }
       table { border-collapse: collapse; }
       td, th { border: 1px solid #aaa; min-width: 8rem; height: 2rem; }
-      .available { background: #e7f5e7; }
-      .booked { background: #f4dddd; }
-      .unknown { background: #eee; }
+      .state-label { display: inline-block; min-width: 8rem; }
     </style>
   </head>
   <body>
@@ -33,13 +31,13 @@
       <tbody>
         <tr>
           <th>09:00–10:00</th>
-          <td class="available">available</td>
-          <td class="booked">booked</td>
+          <td class="terrainTxt time_60" terrain="Court 1" heure="09:00"><span class="state-label">available</span></td>
+          <td class="terrainTxt time_60" terrain="Court 2" heure="09:00"><span class="state-label">unavailable</span></td>
         </tr>
         <tr>
           <th>10:00–11:00</th>
-          <td class="unknown">partially booked</td>
-          <td class="available">available</td>
+          <td class="terrainTxt time_60" terrain="Court 1" heure="10:00"><span class="state-label">partially booked</span></td>
+          <td class="terrainTxt time_60" terrain="Court 2" heure="10:00"><span class="state-label">available</span></td>
         </tr>
       </tbody>
     </table>
