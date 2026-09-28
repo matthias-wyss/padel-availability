@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any, Self, cast
 
@@ -11,7 +11,6 @@ from padel_availability.connectors.playtomic_browser import BrowserFactory
 from padel_availability.connectors.plugin import PluginSource
 from padel_availability.connectors.plugin_browser import (
     _PLUGIN_COOKIE_CONTROL_SCRIPT,  # pyright: ignore[reportPrivateUsage]
-    _PLUGIN_NEXT_CONTROL_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     _PLUGIN_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     PluginBrowserConnector,
     PluginBrowserError,
@@ -56,12 +55,21 @@ class _FakePluginLocator:
         self.index = index
 
     def count(self) -> int:
-        if "next" in self.selector.casefold():
-            return 1
         if "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
             return int(self.page.cookie_visible)
         if self.selector == "select":
             return 2 if self.index is None else 1
+        if self.selector == "#multi-language-date":
+            return 1
+        if self.selector == "#datepicker":
+            return int(self.page.datepicker_open)
+        if self.selector in {
+            "#datepicker .ui-datepicker-month",
+            "#datepicker .ui-datepicker-year",
+        }:
+            return int(self.page.datepicker_open)
+        if self.selector == '#datepicker td[data-handler="selectDay"]':
+            return 31 if self.index is None else 1
         return 0
 
     def is_visible(self) -> bool:
@@ -69,17 +77,44 @@ class _FakePluginLocator:
 
     def click(self) -> None:
         self.page.clicks.append(self.selector)
-        if "next" in self.selector.casefold():
-            self.page.current_date += timedelta(days=1)
+        if self.selector == "#multi-language-date":
+            self.page.datepicker_open = True
+            self.page.datepicker_month = self.page.current_date.month - 1
+            self.page.datepicker_year = self.page.current_date.year
+        elif self.selector == '#datepicker td[data-handler="selectDay"]' and self.index is not None:
+            selected_date = date(
+                self.page.datepicker_year, self.page.datepicker_month + 1, self.index + 1
+            )
+            self.page.current_date = selected_date
+            self.page.date_selections.append(selected_date)
+            self.page.datepicker_open = False
         elif "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
             self.page.cookie_visible = False
+
+    def get_attribute(self, name: str) -> str | None:
+        if self.selector == '#datepicker td[data-handler="selectDay"]' and self.index is not None:
+            if name == "data-month":
+                return str(self.page.datepicker_month)
+            if name == "data-year":
+                return str(self.page.datepicker_year)
+        return None
+
+    def inner_text(self) -> str:
+        if self.selector == '#datepicker td[data-handler="selectDay"]' and self.index is not None:
+            return str(self.index + 1)
+        return ""
 
     def nth(self, index: int) -> _FakePluginLocator:
         return _FakePluginLocator(self.page, self.selector, index)
 
-    def select_option(self, *, label: str) -> None:
-        self.page.activity_selects.append(label)
-        self.page.activity = "Padel"
+    def select_option(self, *, label: str | None = None, value: str | None = None) -> None:
+        if self.selector == "select" and label is not None:
+            self.page.activity_selects.append(label)
+            self.page.activity = "Padel"
+        elif self.selector == "#datepicker .ui-datepicker-month" and value is not None:
+            self.page.datepicker_month = int(value)
+        elif self.selector == "#datepicker .ui-datepicker-year" and value is not None:
+            self.page.datepicker_year = int(value)
 
 
 class _FakePluginPage:
@@ -92,6 +127,10 @@ class _FakePluginPage:
         self.clicks: list[str] = []
         self.activity = "Padel"
         self.activity_selects: list[str] = []
+        self.datepicker_open = False
+        self.datepicker_month = start.month - 1
+        self.datepicker_year = start.year
+        self.date_selections: list[date] = []
         self.empty_grid = False
         self.transient_visible_evaluations = 0
         self.goto_args: list[tuple[str, str, int]] = []
@@ -101,8 +140,6 @@ class _FakePluginPage:
         self.goto_args.append((url, wait_until, timeout))
 
     def evaluate(self, script: str, _arg: object = None) -> Any:
-        if ".header_date button" in script:
-            return 'button[aria-label="Next day"]'
         if 'input[type="button"]' in script:
             if self.cookie_control_count > 1:
                 return "!ambiguous"
@@ -183,7 +220,7 @@ def _collect(connector: PluginBrowserConnector, *, end: date) -> Any:
     )
 
 
-def test_plugin_connector_uses_public_diary_and_visible_next_day_navigation() -> None:
+def test_plugin_connector_uses_public_diary_and_visible_date_navigation() -> None:
     page = _FakePluginPage()
     connector, context, browser = _connector(page)
 
@@ -191,7 +228,7 @@ def test_plugin_connector_uses_public_diary_and_visible_next_day_navigation() ->
     connector.close()
 
     assert page.goto_args == [(SOURCE.booking_url, "commit", 15_000)]
-    assert len([click for click in page.clicks if "next" in click.casefold()]) == 1
+    assert page.date_selections == [date(2026, 9, 27)]
     assert all(
         "booking" not in click.casefold() and "slot" not in click.casefold()
         for click in page.clicks
@@ -223,6 +260,23 @@ def test_plugin_connector_selects_padel_before_accepting_explicit_empty_grid() -
     assert result.run.status == "success"
     assert result.slots == ()
     assert page.activity_selects == ["Padel - 2026-2027"]
+
+
+def test_plugin_connector_uses_visible_datepicker_across_month_boundary() -> None:
+    start = date(2026, 9, 30)
+    page = _FakePluginPage(start=start)
+    connector, _context, _browser = _connector(page)
+
+    result = connector.collect(
+        LOCATION,
+        run_id="run-plugin-month-boundary",
+        window_start=start,
+        window_end=date(2026, 10, 2),
+        collected_at="2026-09-30T00:00:00Z",
+    )
+
+    assert result.run.status == "success"
+    assert page.date_selections == [date(2026, 10, 1)]
 
 
 def test_plugin_connector_rejects_authentication_and_closes_resources() -> None:
@@ -452,7 +506,6 @@ def test_fixture_is_a_sanitized_visible_diary_and_extracts_required_payload() ->
         page = browser.new_page()
         page.set_content(FIXTURE.read_text(encoding="utf-8"))
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
-        assert page.evaluate(_PLUGIN_NEXT_CONTROL_SCRIPT) == 'button[aria-label="Next day"]'
         assert page.evaluate(_PLUGIN_COOKIE_CONTROL_SCRIPT) == ""
         browser.close()
 

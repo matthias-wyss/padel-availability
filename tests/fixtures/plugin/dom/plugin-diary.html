@@ -5,7 +5,6 @@
     <title>Public weekly court diary</title>
     <style>
       body { font: 16px sans-serif; }
-      .date-nav { display: flex; gap: 1rem; }
       table { border-collapse: collapse; }
       td, th { border: 1px solid #aaa; min-width: 8rem; height: 2rem; }
       .state-label { display: inline-block; min-width: 8rem; }
@@ -14,11 +13,7 @@
   <body>
     <header>
       <div class="header_date">
-        <nav class="date-nav" aria-label="Date navigation">
-          <button type="button" aria-label="Previous day">‹</button>
-          <span>2026-09-26</span>
-          <button type="button" aria-label="Next day">›</button>
-        </nav>
+        <div id="multi-language-date">2026-09-26</div>
       </div>
       <label>Activity
         <select class="sports-types">

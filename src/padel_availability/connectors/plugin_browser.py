@@ -199,37 +199,6 @@ _PLUGIN_ACTIVITY_CONTROL_SCRIPT = r"""
 }
 """
 
-_PLUGIN_NEXT_CONTROL_SCRIPT = r"""
-() => {
-  const visible = element => {
-    const rect = element.getBoundingClientRect();
-    if (!rect.width || !rect.height) return false;
-    for (let current = element; current; current = current.parentElement) {
-      const style = getComputedStyle(current);
-      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 ||
-          current.getAttribute('aria-hidden') === 'true') return false;
-    }
-    return true;
-  };
-  const controls = Array.from(document.querySelectorAll(
-    '.header_date button, .header_date a, .header_date [role="button"]'
-  )).filter(visible).filter(element => {
-    const label = [element.innerText, element.getAttribute('aria-label'), element.title]
-      .filter(Boolean).join(' ').toLocaleLowerCase();
-    return /next|following|demain|suivant|siguiente|›|→|chevron_right/.test(label);
-  });
-  if (controls.length > 1) return '!ambiguous';
-  if (!controls.length) return '';
-  const element = controls[0];
-  const label = element.getAttribute('aria-label');
-  if (label) return `${element.tagName.toLocaleLowerCase()}[aria-label=${JSON.stringify(label)}]`;
-  const title = element.title;
-  if (title) return `${element.tagName.toLocaleLowerCase()}[title=${JSON.stringify(title)}]`;
-  const text = (element.innerText || '').trim();
-  return text ? `${element.tagName.toLocaleLowerCase()}:has-text(${JSON.stringify(text)})` : '';
-}
-"""
-
 _PLUGIN_COOKIE_CONTROL_SCRIPT = r"""
 () => {
   const visible = element => {
@@ -275,9 +244,13 @@ class _PluginLocator(Protocol):
 
     def click(self) -> None: ...
 
+    def get_attribute(self, name: str) -> str | None: ...
+
+    def inner_text(self) -> str: ...
+
     def nth(self, index: int) -> "_PluginLocator": ...
 
-    def select_option(self, *, label: str) -> object: ...
+    def select_option(self, *, label: str | None = None, value: str | None = None) -> object: ...
 
 
 class _PluginPage(Protocol):
@@ -377,6 +350,36 @@ def _select_plugin_activity(page: _PluginPage, timeout_ms: int) -> None:
             raise PluginBrowserError("visible Plugin activity control has an invalid response")
         page.wait_for_timeout(100)
     raise PluginBrowserError("visible Plugin Padel activity control was not found")
+
+
+def _select_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: int) -> None:
+    _visible_locator(page, "#multi-language-date").click()
+    datepicker = page.locator("#datepicker")
+    for _ in range(max(1, timeout_ms // 100)):
+        if datepicker.count() == 1 and datepicker.is_visible():
+            break
+        page.wait_for_timeout(100)
+    else:
+        raise PluginBrowserError("visible Plugin datepicker was not found")
+
+    month = _visible_locator(page, "#datepicker .ui-datepicker-month")
+    year = _visible_locator(page, "#datepicker .ui-datepicker-year")
+    month.select_option(value=str(requested_date.month - 1))
+    year.select_option(value=str(requested_date.year))
+    day_cells = page.locator('#datepicker td[data-handler="selectDay"]')
+    matches: list[_PluginLocator] = []
+    for index in range(day_cells.count()):
+        cell = day_cells.nth(index)
+        if (
+            cell.is_visible()
+            and cell.get_attribute("data-month") == str(requested_date.month - 1)
+            and cell.get_attribute("data-year") == str(requested_date.year)
+            and cell.inner_text().strip() == str(requested_date.day)
+        ):
+            matches.append(cell)
+    if len(matches) != 1:
+        raise PluginBrowserError("visible Plugin datepicker day was missing or ambiguous")
+    matches[0].click()
 
 
 def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
@@ -551,16 +554,7 @@ class PluginBrowserConnector:
                         observations.extend(parse_plugin_dom(payload, current_date))
                         current_date += timedelta(days=1)
                         if current_date < window_end:
-                            selector = page.evaluate(_PLUGIN_NEXT_CONTROL_SCRIPT)
-                            if selector == "!ambiguous":
-                                raise PluginBrowserError(
-                                    "visible Plugin next-day control is ambiguous"
-                                )
-                            if not isinstance(selector, str) or not selector:
-                                raise PluginBrowserError(
-                                    "visible Plugin next-day control was not found"
-                                )
-                            _visible_locator(page, selector).click()
+                            _select_plugin_date(page, current_date, self._timeout_ms)
                             payload = _wait_for_plugin_date(
                                 page, current_date, self._timeout_ms, expected_activity="Padel"
                             )
