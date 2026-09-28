@@ -196,12 +196,24 @@ def test_markdown_report_escapes_special_text_and_parenthesized_urls() -> None:
 
 def test_evidence_sorting_breaks_all_ties_deterministically() -> None:
     first = SourceEvidence(
-        "https://example.test/source", "z-source", "Z title", "2026-09-21T00:00:00Z",
-        "location.fact", "supports", "same evidence", "probable",
+        "https://example.test/source",
+        "z-source",
+        "Z title",
+        "2026-09-21T00:00:00Z",
+        "location.fact",
+        "supports",
+        "same evidence",
+        "probable",
     )
     second = SourceEvidence(
-        "https://example.test/source", "a-source", "A title", "2026-09-21T00:00:00Z",
-        "location.fact", "supports", "same evidence", "confirmed",
+        "https://example.test/source",
+        "a-source",
+        "A title",
+        "2026-09-21T00:00:00Z",
+        "location.fact",
+        "supports",
+        "same evidence",
+        "confirmed",
     )
     location = replace(sample_locations()[0], evidence=(first, second))
     reverse = replace(sample_locations()[0], evidence=(second, first))
@@ -233,28 +245,34 @@ def test_cli_builds_and_reports_from_persisted_database(tmp_path: Path) -> None:
     root = Path(__file__).parents[1]
 
     assert main(["init-db", "--database", str(database)]) == 0
-    assert main(
-        [
-            "import-candidates",
-            "--database",
-            str(database),
-            "--input",
-            str(root / "data/candidates.json"),
-        ]
-    ) == 0
-    assert main(
-        [
-            "build-catalog",
-            "--database",
-            str(database),
-            "--candidates",
-            str(root / "data/candidates.json"),
-            "--verified",
-            str(root / "data/verified_locations.json"),
-            "--run-id",
-            "inventory-2026-09-21",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "import-candidates",
+                "--database",
+                str(database),
+                "--input",
+                str(root / "data/candidates.json"),
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "build-catalog",
+                "--database",
+                str(database),
+                "--candidates",
+                str(root / "data/candidates.json"),
+                "--verified",
+                str(root / "data/verified_locations.json"),
+                "--run-id",
+                "inventory-2026-09-21",
+            ]
+        )
+        == 0
+    )
     assert main(["report", "--database", str(database), "--output", str(output)]) == 0
     assert main(["report", "--database", str(database), "--output", str(json_output)]) == 0
     report = output.read_text(encoding="utf-8")
@@ -275,28 +293,34 @@ def test_cli_rebuilds_identical_report_for_unchanged_inputs(tmp_path: Path) -> N
 
     for iteration in range(2):
         assert main(["init-db", "--database", str(database)]) == 0
-        assert main(
-            [
-                "import-candidates",
-                "--database",
-                str(database),
-                "--input",
-                str(root / "data/candidates.json"),
-            ]
-        ) == 0
-        assert main(
-            [
-                "build-catalog",
-                "--database",
-                str(database),
-                "--candidates",
-                str(root / "data/candidates.json"),
-                "--verified",
-                str(root / "data/verified_locations.json"),
-                "--run-id",
-                "inventory-2026-09-21",
-            ]
-        ) == 0
+        assert (
+            main(
+                [
+                    "import-candidates",
+                    "--database",
+                    str(database),
+                    "--input",
+                    str(root / "data/candidates.json"),
+                ]
+            )
+            == 0
+        )
+        assert (
+            main(
+                [
+                    "build-catalog",
+                    "--database",
+                    str(database),
+                    "--candidates",
+                    str(root / "data/candidates.json"),
+                    "--verified",
+                    str(root / "data/verified_locations.json"),
+                    "--run-id",
+                    "inventory-2026-09-21",
+                ]
+            )
+            == 0
+        )
         assert main(["report", "--database", str(database), "--output", str(output)]) == 0
         reports.append(output.read_bytes())
         if iteration == 0:
@@ -342,28 +366,34 @@ def test_rebuilding_catalog_removes_stale_locations_and_matches(tmp_path: Path) 
         )
         assert connection.execute("SELECT COUNT(*) FROM candidate_entries").fetchone()[0] == 1
         assert connection.execute("SELECT COUNT(*) FROM sources").fetchone()[0] == 1
-        assert connection.execute(
-            "SELECT COUNT(*) FROM sources WHERE url = ?", ("https://example.test/second",)
-        ).fetchone()[0] == 0
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM sources WHERE url = ?", ("https://example.test/second",)
+            ).fetchone()[0]
+            == 0
+        )
     finally:
         connection.close()
 
 
 def test_cli_returns_two_for_validation_errors(tmp_path: Path) -> None:
     assert main(["init-db", "--database", str(tmp_path / "missing" / "catalog.sqlite3")]) == 0
-    assert main(
-        [
-            "build-catalog",
-            "--database",
-            str(tmp_path / "catalog.sqlite3"),
-            "--candidates",
-            str(tmp_path / "missing.json"),
-            "--verified",
-            str(tmp_path / "verified.json"),
-            "--run-id",
-            "run-1",
-        ]
-    ) == 2
+    assert (
+        main(
+            [
+                "build-catalog",
+                "--database",
+                str(tmp_path / "catalog.sqlite3"),
+                "--candidates",
+                str(tmp_path / "missing.json"),
+                "--verified",
+                str(tmp_path / "verified.json"),
+                "--run-id",
+                "run-1",
+            ]
+        )
+        == 2
+    )
 
 
 def test_cli_returns_two_for_missing_arguments(capsys: pytest.CaptureFixture[str]) -> None:

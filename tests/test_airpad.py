@@ -70,9 +70,7 @@ def test_load_airpad_sources_rejects_duplicate_rows(tmp_path: Path) -> None:
     "booking_url",
     ("https://www.airpad.ch/private", "https://example.com/reserve"),
 )
-def test_load_airpad_sources_rejects_wrong_booking_url(
-    tmp_path: Path, booking_url: str
-) -> None:
+def test_load_airpad_sources_rejects_wrong_booking_url(tmp_path: Path, booking_url: str) -> None:
     path = tmp_path / "airpad_sources.json"
     rows = manifest_rows()
     rows[0]["booking_url"] = booking_url
@@ -83,9 +81,7 @@ def test_load_airpad_sources_rejects_wrong_booking_url(
 
 
 @pytest.mark.parametrize("checked_at", ("2026-09-22T00:00:00+02:00", "2026-09-22T00:00:00"))
-def test_load_airpad_sources_rejects_invalid_checked_at(
-    tmp_path: Path, checked_at: str
-) -> None:
+def test_load_airpad_sources_rejects_invalid_checked_at(tmp_path: Path, checked_at: str) -> None:
     path = tmp_path / "airpad_sources.json"
     rows = manifest_rows()
     rows[0]["checked_at"] = checked_at

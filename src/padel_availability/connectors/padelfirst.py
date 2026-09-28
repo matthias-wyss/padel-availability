@@ -1,5 +1,4 @@
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -17,35 +16,23 @@ from ..models import (
     validate_utc_timestamp as _utc_timestamp,
 )
 
-AirpadStatus = Literal["public", "unavailable"]
+PadelFirstStatus = Literal["public", "unavailable"]
 
-AIRPAD_LOCATION_IDS: frozenset[str] = frozenset(
-    {
-        "airpad-les-acacias",
-        "airpad-la-praille",
-        "airpad-meyrin",
-        "airpad-plan-les-ouates",
-    }
-)
-AIRPAD_LOCATION_LABELS: Mapping[str, str] = {
-    "airpad-les-acacias": "LES ACACIAS",
-    "airpad-la-praille": "LA PRAILLE",
-    "airpad-meyrin": "MEYRIN",
-    "airpad-plan-les-ouates": "PLAN-LES-OUATES",
-}
-_AIRPAD_BOOKING_URL = "https://www.airpad.ch/reserve"
+PADEL_FIRST_LOCATION_IDS: frozenset[str] = frozenset({"vernier"})
+PADEL_FIRST_BOOKING_URL = "https://padelfirst.ss-r.ch/court-vernier/"
+PADEL_FIRST_SLOT_MINUTES = 90
 
 
-class AirpadSourceError(ValueError):
-    """Raised when a public AIRPAD source or manifest is unusable."""
+class PadelFirstSourceError(ValueError):
+    """Raised when a Padel First source or manifest is unusable."""
 
 
 @dataclass(frozen=True, slots=True)
-class AirpadSource:
+class PadelFirstSource:
     location_id: str
     booking_url: str
     checked_at: str
-    status: AirpadStatus
+    status: PadelFirstStatus
 
     def __post_init__(self) -> None:
         _text(self.location_id, "location_id")
@@ -55,15 +42,15 @@ class AirpadSource:
             raise ModelError("status has invalid value")
 
 
-def _source_error(message: str) -> AirpadSourceError:
-    return AirpadSourceError(message[:160])
+def _source_error(message: str) -> PadelFirstSourceError:
+    return PadelFirstSourceError(message[:160])
 
 
-def load_airpad_sources(path: Path) -> tuple[AirpadSource, ...]:
+def load_padelfirst_sources(path: Path) -> tuple[PadelFirstSource, ...]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise _source_error("could not read AIRPAD source manifest") from error
+        raise _source_error("could not read Padel First source manifest") from error
 
     if not isinstance(raw, dict):
         raise _source_error("source manifest must contain format_version and sources")
@@ -76,29 +63,24 @@ def load_airpad_sources(path: Path) -> tuple[AirpadSource, ...]:
     if not isinstance(raw_sources_value, list):
         raise _source_error("source manifest sources must be a list")
     raw_sources = cast(list[object], raw_sources_value)
-    if len(raw_sources) != len(AIRPAD_LOCATION_IDS):
-        raise _source_error("source manifest must contain exactly four rows")
+    if len(raw_sources) != len(PADEL_FIRST_LOCATION_IDS):
+        raise _source_error("source manifest must contain exactly one row")
 
-    sources: list[AirpadSource] = []
+    sources: list[PadelFirstSource] = []
     for raw_row in raw_sources:
         if not isinstance(raw_row, dict):
             raise _source_error("source row has invalid fields")
         row = cast(dict[str, object], raw_row)
-        if set(row) != {
-            "location_id",
-            "booking_url",
-            "checked_at",
-            "status",
-        }:
+        if set(row) != {"location_id", "booking_url", "checked_at", "status"}:
             raise _source_error("source row has invalid fields")
-        if row["booking_url"] != _AIRPAD_BOOKING_URL:
-            raise _source_error("source row must use the common AIRPAD booking URL")
+        if row["booking_url"] != PADEL_FIRST_BOOKING_URL:
+            raise _source_error("source row must use the common Padel First booking URL")
         try:
-            source = AirpadSource(
+            source = PadelFirstSource(
                 cast(str, row["location_id"]),
                 cast(str, row["booking_url"]),
                 cast(str, row["checked_at"]),
-                cast(AirpadStatus, row["status"]),
+                cast(PadelFirstStatus, row["status"]),
             )
         except (ModelError, TypeError) as error:
             raise _source_error("source row failed validation") from error
@@ -107,7 +89,7 @@ def load_airpad_sources(path: Path) -> tuple[AirpadSource, ...]:
     location_ids = [source.location_id for source in sources]
     if (
         len(set(location_ids)) != len(location_ids)
-        or frozenset(location_ids) != AIRPAD_LOCATION_IDS
+        or frozenset(location_ids) != PADEL_FIRST_LOCATION_IDS
     ):
-        raise _source_error("source manifest must cover the exact four locations once")
+        raise _source_error("source manifest must cover the exact one location once")
     return tuple(sorted(sources, key=lambda source: source.location_id))

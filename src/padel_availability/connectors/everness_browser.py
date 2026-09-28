@@ -156,7 +156,8 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
       const cells = Array.from(row.querySelectorAll('.terrainTxt')).filter(visible).map(cell => ({
         class: cell.getAttribute('class') || '',
         style: cell.getAttribute('style') || '',
-        colspan: cell.getAttribute('colspan')
+        colspan: cell.getAttribute('colspan'),
+        rowspan: cell.getAttribute('rowspan')
       }));
       rows.push({time: text(hour), cells});
     }
@@ -181,7 +182,7 @@ _EVERNESS_VISIBLE_DOM_SCRIPT = r"""
     Array.from(body.querySelectorAll('.loading, [aria-busy="true"]')).some(visible);
   const fingerprintInput = JSON.stringify({
     courts,
-    rows: rows.map(row => [row.time, row.cells.map(cell => [cell.class, cell.style, cell.colspan])])
+    rows: rows.map(row => [row.time, row.cells.map(cell => [cell.class, cell.style, cell.colspan, cell.rowspan])])
   });
   let hash = 2166136261;
   for (let index = 0; index < fingerprintInput.length; index += 1) {
@@ -305,6 +306,22 @@ def _cell_span(value: object) -> int:
     raise EvernessBrowserError("visible cell has an invalid span")
 
 
+def _cell_row_span(value: object) -> int:
+    cell = _dom_mapping(value, "visible cell")
+    span = cell.get("rowspan")
+    if span is None:
+        return 1
+    if isinstance(span, bool):
+        raise EvernessBrowserError("visible cell has an invalid span")
+    if isinstance(span, int):
+        if span > 0:
+            return span
+        raise EvernessBrowserError("visible cell has an invalid span")
+    if isinstance(span, str) and re.fullmatch(r"[1-9][0-9]*", span):
+        return int(span)
+    raise EvernessBrowserError("visible cell has an invalid span")
+
+
 def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSlotObservation, ...]:
     """Parse the small visible-DOM payload returned by the Everness booking page."""
     dom = _dom_mapping(payload)
@@ -343,6 +360,7 @@ def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSl
 
     rows = cast(list[object], raw_rows)
     parsed_rows: list[tuple[time, list[object]]] = []
+    active_rowspans: dict[int, tuple[object, int]] = {}
     for raw_row in rows:
         row = _dom_mapping(raw_row, "visible row")
         row_time = _parse_row_time(row.get("time"))
@@ -350,15 +368,34 @@ def parse_everness_dom(payload: object, requested_date: date) -> tuple[BrowserSl
         if not isinstance(raw_cells, list):
             raise EvernessBrowserError("visible booking grid has a partial matrix")
         cells = cast(list[object], raw_cells)
-        expanded_cells: list[object] = []
-        for cell in cells:
-            span = _cell_span(cell)
-            if len(expanded_cells) + span > len(court_labels):
+        expanded_cells: list[object | None] = [None] * len(court_labels)
+        next_rowspans: dict[int, tuple[object, int]] = {}
+        for column, (cell, remaining) in active_rowspans.items():
+            if column >= len(expanded_cells) or expanded_cells[column] is not None:
                 raise EvernessBrowserError("visible booking grid has a partial matrix")
-            expanded_cells.extend([cell] * span)
-        if len(expanded_cells) != len(court_labels):
+            expanded_cells[column] = cell
+            if remaining > 1:
+                next_rowspans[column] = (cell, remaining - 1)
+        for cell in cells:
+            column_span = _cell_span(cell)
+            row_span = _cell_row_span(cell)
+            column = next(
+                (index for index, existing in enumerate(expanded_cells) if existing is None),
+                None,
+            )
+            if column is None or column + column_span > len(expanded_cells):
+                raise EvernessBrowserError("visible booking grid has a partial matrix")
+            for offset in range(column_span):
+                target = column + offset
+                if expanded_cells[target] is not None or target in next_rowspans:
+                    raise EvernessBrowserError("visible booking grid has a partial matrix")
+                expanded_cells[target] = cell
+                if row_span > 1:
+                    next_rowspans[target] = (cell, row_span - 1)
+        if any(cell is None for cell in expanded_cells):
             raise EvernessBrowserError("visible booking grid has a partial matrix")
-        parsed_rows.append((row_time, expanded_cells))
+        parsed_rows.append((row_time, cast(list[object], expanded_cells)))
+        active_rowspans = next_rowspans
 
     if not parsed_rows:
         return ()
@@ -541,24 +578,16 @@ def _datepicker_month(value: str) -> tuple[int, int]:
 
 
 def _datepicker_selected_month_year(month_value: str, year_value: str) -> date:
-    if re.fullmatch(r"[0-9]+", month_value) is None or re.fullmatch(
-        r"[0-9]+", year_value
-    ) is None:
-        raise EvernessBrowserError(
-            "visible Everness datepicker has invalid selected month or year"
-        )
+    if re.fullmatch(r"[0-9]+", month_value) is None or re.fullmatch(r"[0-9]+", year_value) is None:
+        raise EvernessBrowserError("visible Everness datepicker has invalid selected month or year")
     month_index = int(month_value)
     year = int(year_value)
     if not 0 <= month_index <= 11 or not 1 <= year <= 9999:
-        raise EvernessBrowserError(
-            "visible Everness datepicker has invalid selected month or year"
-        )
+        raise EvernessBrowserError("visible Everness datepicker has invalid selected month or year")
     return date(year, month_index + 1, 1)
 
 
-def _select_everness_date(
-    page: _EvernessPage, requested_date: date, timeout_ms: int
-) -> None:
+def _select_everness_date(page: _EvernessPage, requested_date: date, timeout_ms: int) -> None:
     date_control = _everness_visible_locator(page, "#multi-language-date")
     if _parse_date_label(date_control.inner_text()) == requested_date:
         return
@@ -832,6 +861,4 @@ class EvernessBrowserConnector:
         return AvailabilityResult(run, slots)
 
 
-EvernessBrowserConnectorFactory = Callable[
-    [Sequence[EvernessSource]], EvernessBrowserConnector
-]
+EvernessBrowserConnectorFactory = Callable[[Sequence[EvernessSource]], EvernessBrowserConnector]

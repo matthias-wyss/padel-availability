@@ -1,10 +1,26 @@
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Literal
+from datetime import UTC, date, datetime, timedelta
+from typing import Literal, cast
 from zoneinfo import ZoneInfo
 
-from .models import ModelError, _literal, _optional_text, _text, _url, _utc_timestamp
-
+from .models import (
+    ModelError,
+)
+from .models import (
+    validate_literal as _literal,
+)
+from .models import (
+    validate_optional_text as _optional_text,
+)
+from .models import (
+    validate_text as _text,
+)
+from .models import (
+    validate_url as _url,
+)
+from .models import (
+    validate_utc_timestamp as _utc_timestamp,
+)
 
 AvailabilityRunStatus = Literal["success", "error", "unavailable"]
 SlotStatus = Literal["available", "unavailable", "unknown"]
@@ -30,13 +46,13 @@ def _date_value(value: object, field: str) -> date:
 
 def _timestamp_value(value: str, field: str) -> datetime:
     _utc_timestamp(value, field)
-    return datetime.fromisoformat(value[:-1] + "+00:00")
+    return datetime.fromisoformat(value)
 
 
 def local_window(now: datetime, horizon_days: int) -> tuple[date, date]:
-    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+    if not isinstance(cast(object, now), datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise ModelError("now must be a timezone-aware datetime")
-    if not isinstance(horizon_days, int) or horizon_days <= 0:
+    if not isinstance(cast(object, horizon_days), int) or horizon_days <= 0:
         raise ModelError("horizon_days must be a positive integer")
     window_start = now.astimezone(_ZURICH).date()
     return window_start, window_start + timedelta(days=horizon_days)
@@ -45,14 +61,12 @@ def local_window(now: datetime, horizon_days: int) -> tuple[date, date]:
 def local_to_utc(value: str) -> str:
     value = _text(value, "timestamp")
     try:
-        parsed = datetime.fromisoformat(
-            value[:-1] + "+00:00" if value.endswith("Z") else value
-        )
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
     except ValueError as error:
         raise ModelError("timestamp must be an offset-aware ISO-8601 timestamp") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ModelError("timestamp must be an offset-aware ISO-8601 timestamp")
-    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +90,7 @@ class AvailabilityRun:
         window_end = _date_value(self.window_end, "window_end")
         if window_end <= window_start:
             raise ModelError("window_end must be after window_start")
-        if not isinstance(self.horizon_days, int) or self.horizon_days <= 0:
+        if not isinstance(cast(object, self.horizon_days), int) or self.horizon_days <= 0:
             raise ModelError("horizon_days must be a positive integer")
         if window_end - window_start != timedelta(days=self.horizon_days):
             raise ModelError("horizon_days must match the window length")
@@ -121,10 +135,10 @@ class AvailabilityResult:
     slots: tuple[AvailabilitySlot, ...]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.run, AvailabilityRun):
+        if not isinstance(cast(object, self.run), AvailabilityRun):
             raise ModelError("run must be an AvailabilityRun")
-        if not isinstance(self.slots, tuple) or not all(
-            isinstance(slot, AvailabilitySlot) for slot in self.slots
+        if not isinstance(cast(object, self.slots), tuple) or not all(
+            isinstance(slot, AvailabilitySlot) for slot in cast(tuple[object, ...], self.slots)
         ):
             raise ModelError("slots must contain AvailabilitySlot values")
         if any(
@@ -144,12 +158,12 @@ class AvailabilitySnapshot:
 
     def __post_init__(self) -> None:
         _text(self.location_id, "location_id")
-        if not isinstance(self.latest_run, AvailabilityRun):
+        if not isinstance(cast(object, self.latest_run), AvailabilityRun):
             raise ModelError("latest_run must be an AvailabilityRun")
         if self.latest_run.location_id != self.location_id:
             raise ModelError("latest_run must belong to location_id")
-        if not isinstance(self.slots, tuple) or not all(
-            isinstance(slot, AvailabilitySlot) for slot in self.slots
+        if not isinstance(cast(object, self.slots), tuple) or not all(
+            isinstance(slot, AvailabilitySlot) for slot in cast(tuple[object, ...], self.slots)
         ):
             raise ModelError("slots must contain AvailabilitySlot values")
         if any(slot.location_id != self.location_id for slot in self.slots):

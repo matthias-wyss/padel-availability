@@ -55,6 +55,7 @@ Task 1 produces the manifest and observation contract:
 ```python
 TransportKind = Literal["json", "browser_dom"]
 
+
 @dataclass(frozen=True, slots=True)
 class PlaytomicSource:
     location_id: str
@@ -64,6 +65,7 @@ class PlaytomicSource:
     checked_at: str
     status: Literal["public", "unavailable"]
 
+
 @dataclass(frozen=True, slots=True)
 class BrowserSlotObservation:
     external_id: str | None
@@ -71,6 +73,7 @@ class BrowserSlotObservation:
     starts_at: str
     ends_at: str
     status: Literal["available", "unavailable", "unknown"]
+
 
 def parse_browser_observations(
     observations: Sequence[BrowserSlotObservation],

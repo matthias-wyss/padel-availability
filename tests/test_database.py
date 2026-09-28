@@ -4,24 +4,24 @@ from pathlib import Path
 
 import pytest
 
+from padel_availability.availability import (
+    AvailabilityResult,
+    AvailabilityRun,
+    AvailabilitySlot,
+)
 from padel_availability.database import (
     connect,
     create_verification_run,
     get_availability_snapshot,
     initialize,
     insert_candidates,
-    list_candidate_matches,
     list_availability_runs,
     list_availability_slots,
+    list_candidate_matches,
     list_locations,
     record_candidate_match,
     save_availability_result,
     upsert_location,
-)
-from padel_availability.availability import (
-    AvailabilityResult,
-    AvailabilityRun,
-    AvailabilitySlot,
 )
 from padel_availability.models import (
     CandidateEntry,
@@ -297,9 +297,7 @@ def test_candidate_matches_and_verification_runs_round_trip(tmp_path: Path) -> N
         )
         create_verification_run(
             connection,
-            VerificationRun(
-                "run-1", "2026-09-21T10:00:00Z", "2026-09-21T10:01:00Z", 1, 0, "ok"
-            ),
+            VerificationRun("run-1", "2026-09-21T10:00:00Z", "2026-09-21T10:01:00Z", 1, 0, "ok"),
         )
         assert connection.execute("SELECT run_id FROM verification_runs").fetchone()[0] == "run-1"
     finally:
@@ -331,14 +329,20 @@ def test_reassigning_candidate_removes_old_location_association(tmp_path: Path) 
         locations = {location.location_id: location for location in list_locations(connection)}
         assert locations["example-geneve"].candidate_ids == ()
         assert locations["other-geneve"].candidate_ids == ("example",)
-        assert connection.execute(
-            "SELECT matched_location_id FROM candidate_entries WHERE candidate_id = ?",
-            ("example",),
-        ).fetchone()[0] == "other-geneve"
-        assert connection.execute(
-            "SELECT COUNT(*) FROM location_candidates WHERE candidate_id = ?",
-            ("example",),
-        ).fetchone()[0] == 1
+        assert (
+            connection.execute(
+                "SELECT matched_location_id FROM candidate_entries WHERE candidate_id = ?",
+                ("example",),
+            ).fetchone()[0]
+            == "other-geneve"
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM location_candidates WHERE candidate_id = ?",
+                ("example",),
+            ).fetchone()[0]
+            == 1
+        )
         assert list_candidate_matches(connection) == (
             CandidateMatch("example", "other-geneve", "matched", "Initial match."),
         )

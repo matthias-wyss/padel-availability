@@ -111,17 +111,18 @@ def test_timestamps_require_iso8601_utc_z_suffix() -> None:
 
 
 def test_malformed_url_port_raises_model_error() -> None:
-    with pytest.raises(ModelError):
-        SourceEvidence(
-            "https://host:bad/",
-            "official",
-            "Example",
-            "2026-09-21T10:00:00Z",
-            "name",
-            "supports",
-            "Example.",
-            "confirmed",
-        )
+    for url in ("https://host:bad/", "http://:80/"):
+        with pytest.raises(ModelError):
+            SourceEvidence(
+                url,
+                "official",
+                "Example",
+                "2026-09-21T10:00:00Z",
+                "name",
+                "supports",
+                "Example.",
+                "confirmed",
+            )
 
 
 def test_direct_tuple_fields_reject_lists_and_duplicates() -> None:

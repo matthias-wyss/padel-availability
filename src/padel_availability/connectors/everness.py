@@ -3,7 +3,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from ..models import ModelError, _text, _url, _utc_timestamp  # pyright: ignore[reportPrivateUsage]
+from ..models import (
+    ModelError,
+)
+from ..models import (
+    validate_text as _text,
+)
+from ..models import (
+    validate_url as _url,
+)
+from ..models import (
+    validate_utc_timestamp as _utc_timestamp,
+)
 
 EvernessStatus = Literal["public", "unavailable"]
 
@@ -75,6 +86,9 @@ def load_everness_sources(path: Path) -> tuple[EvernessSource, ...]:
         sources.append(source)
 
     location_ids = [source.location_id for source in sources]
-    if len(set(location_ids)) != len(location_ids) or frozenset(location_ids) != EVERNESS_LOCATION_IDS:
+    if (
+        len(set(location_ids)) != len(location_ids)
+        or frozenset(location_ids) != EVERNESS_LOCATION_IDS
+    ):
         raise _source_error("source manifest must cover the exact one location once")
     return tuple(sorted(sources, key=lambda source: source.location_id))

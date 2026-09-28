@@ -61,6 +61,7 @@ AvailabilityRunStatus = Literal["success", "error", "unavailable"]
 SlotStatus = Literal["available", "unavailable", "unknown"]
 SnapshotStatus = Literal["success", "stale", "error", "unavailable"]
 
+
 @dataclass(frozen=True, slots=True)
 class AvailabilityRun:
     run_id: str
@@ -74,6 +75,7 @@ class AvailabilityRun:
     status: AvailabilityRunStatus
     error: str | None
 
+
 @dataclass(frozen=True, slots=True)
 class AvailabilitySlot:
     run_id: str
@@ -86,10 +88,12 @@ class AvailabilitySlot:
     timezone: str
     status: SlotStatus
 
+
 @dataclass(frozen=True, slots=True)
 class AvailabilityResult:
     run: AvailabilityRun
     slots: tuple[AvailabilitySlot, ...]
+
 
 @dataclass(frozen=True, slots=True)
 class AvailabilitySnapshot:
@@ -110,15 +114,18 @@ def save_availability_result(
     commit: bool = True,
 ) -> None: ...
 
+
 def list_availability_runs(
     connection: sqlite3.Connection,
     location_id: str | None = None,
 ) -> tuple[AvailabilityRun, ...]: ...
 
+
 def list_availability_slots(
     connection: sqlite3.Connection,
     run_id: str,
 ) -> tuple[AvailabilitySlot, ...]: ...
+
 
 def get_availability_snapshot(
     connection: sqlite3.Connection,
@@ -131,6 +138,7 @@ Task 3 produces these connector functions:
 ```python
 def load_playtomic_sources(path: Path) -> tuple[PlaytomicSource, ...]: ...
 
+
 def parse_playtomic_slots(
     payload: object,
     *,
@@ -139,6 +147,7 @@ def parse_playtomic_slots(
     window_start: date,
     window_end: date,
 ) -> tuple[AvailabilitySlot, ...]: ...
+
 
 class PlaytomicConnector:
     def collect(
@@ -164,6 +173,7 @@ class CollectionOutcome:
     window_start: str
     window_end: str
     error: str | None
+
 
 def collect_playtomic(
     connection: sqlite3.Connection,
@@ -214,9 +224,15 @@ def test_local_time_is_normalized_to_utc() -> None:
 def test_slot_rejects_non_increasing_utc_interval() -> None:
     with pytest.raises(ModelError, match="ends_at"):
         AvailabilitySlot(
-            "run-1", "padel-station", "slot-1", None, None,
-            "2026-09-23T18:00:00Z", "2026-09-23T18:00:00Z",
-            "Europe/Zurich", "available",
+            "run-1",
+            "padel-station",
+            "slot-1",
+            None,
+            None,
+            "2026-09-23T18:00:00Z",
+            "2026-09-23T18:00:00Z",
+            "Europe/Zurich",
+            "available",
         )
 ```
 
@@ -364,6 +380,7 @@ git commit -m "feat: persist availability snapshots"
 
 ```python
 JsonFetcher = Callable[[str], object]
+
 
 @dataclass(frozen=True, slots=True)
 class PlaytomicSource:
@@ -559,11 +576,18 @@ Add tests for parser behavior and validation:
 
 ```python
 def test_collect_playtomic_rejects_non_positive_days(tmp_path: Path) -> None:
-    assert main([
-        "collect-playtomic",
-        "--database", str(tmp_path / "catalog.sqlite3"),
-        "--days", "0",
-    ]) == 2
+    assert (
+        main(
+            [
+                "collect-playtomic",
+                "--database",
+                str(tmp_path / "catalog.sqlite3"),
+                "--days",
+                "0",
+            ]
+        )
+        == 2
+    )
 ```
 
 Add a CLI integration test with a monkeypatched fixture fetcher or direct

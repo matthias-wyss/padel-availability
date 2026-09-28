@@ -20,8 +20,9 @@ _AIRPAD_ZURICH = ZoneInfo("Europe/Zurich")
 _AIRPAD_BLOCK_MARKERS = (
     "captcha",
     "verify you are human",
-    "sign in",
-    "login",
+    "sign in to continue",
+    "login required",
+    "authentication required",
     "access denied",
 )
 _AIRPAD_LOADING_MARKERS = ("loading", "chargement")
@@ -41,6 +42,7 @@ _AIRPAD_MONTHS = (
     "November",
     "December",
 )
+_AIRPAD_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 class AirpadBrowserError(AirpadSourceError):
@@ -80,6 +82,12 @@ _AIRPAD_VISIBLE_DOM_SCRIPT = r"""
     (element.getAttribute('class') || '').split(/\s+/).includes('active')
   );
   const activeDate = selectedDates.length === 1 ? selectedDates[0] : null;
+  const activeDateLabel = activeDate ? text(activeDate) : '';
+  const authenticationMarker = /captcha|verify\s+you\s+are\s+human|sign\s+in\s+to\s+continue|login\s+required|authentication\s+required|access\s+denied/i;
+  const authenticationVisible =
+    Array.from(body.querySelectorAll('input[type="password"]')).some(visible) ||
+    Array.from(body.querySelectorAll('[role="dialog"], [aria-modal="true"]'))
+      .some(element => visible(element) && authenticationMarker.test(text(element)));
   const rows = Array.from(body.querySelectorAll('.playground-slot')).filter(visible);
   const courtRows = rows.filter(row => {
     const title = row.querySelector('.section-title');
@@ -87,41 +95,87 @@ _AIRPAD_VISIBLE_DOM_SCRIPT = r"""
   });
   const slots = [];
   const emptyRows = [];
+  let invalidRows = rows.length === 0 || courtRows.length !== rows.length;
   for (const row of rows) {
     const title = row.querySelector('.section-title');
     const court = title && visible(title) ? text(title) : null;
-    const cards = Array.from(row.querySelectorAll('.info-playground > *')).filter(element =>
-      visible(element) && (
-        (element.getAttribute('class') || '').split(/\s+/).includes('duration-card') ||
-        /Start\s+\d{2}:\d{2}/i.test(text(element)) || /\d+\s*min/i.test(text(element))
-      )
-    );
     const empty = Boolean(row.querySelector('.empty_playground')) &&
       visible(row.querySelector('.empty_playground'));
-    if (empty && court) emptyRows.push(court);
-    for (const card of cards) {
-      const classes = card.getAttribute('class') || '';
-      slots.push({
-        external_id: card.getAttribute('data-slot-id') || card.getAttribute('data-id') ||
-          row.getAttribute('data-slot-id') || null,
-        court,
-        time: text(card).match(/Start\s+(\d{2}:\d{2})/i)?.[1] || null,
-        duration: text(card).match(/Start\s+\d{2}:\d{2}\s*(\d+\s*min)/i)?.[1] || null,
-        class: classes,
-        disabled: card.hasAttribute('disabled') || card.getAttribute('aria-disabled') === 'true' ||
-          row.hasAttribute('disabled') || row.getAttribute('aria-disabled') === 'true',
-        empty_playground: empty
-      });
+    const rowSlotStart = slots.length;
+    const slotContainers = Array.from(row.querySelectorAll('.slot-container')).filter(visible);
+    if (slotContainers.length) {
+      for (const container of slotContainers) {
+        const startElement = container.querySelector('.start-time .time');
+        const start = startElement && visible(startElement) ? text(startElement) : '';
+        const offers = Array.from(container.querySelectorAll('.slot-price-list ion-item'))
+          .filter(visible);
+        if (!court || !/^([01][0-9]|2[0-3]):([0-5][0-9])$/.test(start) || !offers.length) {
+          invalidRows = true;
+          continue;
+        }
+        for (const offer of offers) {
+          const durationElement = offer.querySelector('ion-label');
+          const duration = durationElement && visible(durationElement)
+            ? text(durationElement).match(/\d+\s*min/i)?.[0] || ''
+            : '';
+          if (!duration) {
+            invalidRows = true;
+            continue;
+          }
+          const classes = offer.getAttribute('class') || '';
+          const disabled = offer.hasAttribute('disabled') ||
+            offer.getAttribute('aria-disabled') === 'true' ||
+            row.hasAttribute('disabled') || row.getAttribute('aria-disabled') === 'true' ||
+            (classes.toLowerCase().split(/\s+/).some(value =>
+              ['disabled', 'unavailable', 'booked'].includes(value)));
+          slots.push({
+            external_id: offer.getAttribute('data-slot-id') || offer.getAttribute('data-id') || null,
+            court,
+            time: start,
+            duration,
+            class: `${classes} ${disabled ? 'disabled' : 'available'}`.trim(),
+            disabled,
+            empty_playground: false
+          });
+        }
+      }
+    } else {
+      const cards = Array.from(row.querySelectorAll('.info-playground > *')).filter(element =>
+        visible(element) && (
+          (element.getAttribute('class') || '').split(/\s+/).includes('duration-card') ||
+          /Start\s+\d{2}:\d{2}/i.test(text(element)) || /\d+\s*min/i.test(text(element))
+        )
+      );
+      for (const card of cards) {
+        const classes = card.getAttribute('class') || '';
+        slots.push({
+          external_id: card.getAttribute('data-slot-id') || card.getAttribute('data-id') ||
+            row.getAttribute('data-slot-id') || null,
+          court,
+          time: text(card).match(/Start\s+(\d{2}:\d{2})/i)?.[1] || null,
+          duration: text(card).match(/Start\s+\d{2}:\d{2}\s*(\d+\s*min)/i)?.[1] || null,
+          class: classes,
+          disabled: card.hasAttribute('disabled') || card.getAttribute('aria-disabled') === 'true' ||
+            row.hasAttribute('disabled') || row.getAttribute('aria-disabled') === 'true',
+          empty_playground: empty
+        });
+      }
     }
+    const hasOffers = slots.length > rowSlotStart;
+    if (empty && court) emptyRows.push(court);
+    if (!court || empty && hasOffers || !empty && !hasOffers) invalidRows = true;
   }
   const calendar = Array.from(body.querySelectorAll('.calendar-block')).some(visible);
   return {
     view: calendar && dateButtons.length > 0 ? 'booking' : 'unknown',
     date: activeDate ? dateFromLabel(activeDate.getAttribute('aria-label') || '') : '',
+    active_date_label: activeDateLabel,
+    authentication_visible: authenticationVisible,
     slots,
-    empty_grid: courtRows.length > 0 && courtRows.length === rows.length && slots.length === 0,
+    empty_grid: courtRows.length > 0 && courtRows.length === rows.length &&
+      emptyRows.length === rows.length && slots.length === 0,
     empty_rows: emptyRows,
-    invalid_rows: courtRows.length !== rows.length,
+    invalid_rows: invalidRows,
     visible_text: body.innerText || ''
   };
 }
@@ -218,6 +272,8 @@ def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlot
     normalized_text = " ".join(visible_text.split()).casefold()
     if any(marker in normalized_text for marker in _AIRPAD_BLOCK_MARKERS):
         raise AirpadBrowserError("public AIRPAD page is blocked by login or CAPTCHA")
+    if dom.get("authentication_visible") is True:
+        raise AirpadBrowserError("public AIRPAD page is blocked by authentication")
     if dom.get("view") != "booking":
         raise AirpadBrowserError("visible AIRPAD booking view was not found")
     if dom.get("date") != requested_date.isoformat():
@@ -228,10 +284,10 @@ def parse_airpad_dom(payload: object, requested_date: date) -> tuple[BrowserSlot
     observations = tuple(
         _parse_airpad_slot(item, requested_date) for item in cast(list[object], raw_slots)
     )
+    if dom.get("invalid_rows") is True:
+        raise AirpadBrowserError("visible booking row has a partial matrix or no explicit state")
     if observations:
         return observations
-    if dom.get("invalid_rows") is True:
-        raise AirpadBrowserError("visible booking row is missing court label")
     empty_rows = dom.get("empty_rows")
     if dom.get("empty_grid") is True:
         return ()
@@ -311,9 +367,7 @@ def _airpad_visible_locator(
     return locator
 
 
-def _airpad_exact_visible_locator(
-    frame: _AirpadFrame, selector: str, text: str
-) -> _AirpadLocator:
+def _airpad_exact_visible_locator(frame: _AirpadFrame, selector: str, text: str) -> _AirpadLocator:
     locator = frame.locator(selector)
     matches = [
         locator.nth(index)
@@ -321,7 +375,9 @@ def _airpad_exact_visible_locator(
         if locator.nth(index).is_visible() and locator.nth(index).inner_text().strip() == text
     ]
     if len(matches) != 1:
-        raise AirpadBrowserError(f"visible AIRPAD location label {text!r} was not found exactly once")
+        raise AirpadBrowserError(
+            f"visible AIRPAD location label {text!r} was not found exactly once"
+        )
     return matches[0]
 
 
@@ -351,30 +407,27 @@ def _wait_for_visible_locator(
     raise AirpadBrowserError(f"visible AIRPAD control {selector} was not found")
 
 
-def _wait_for_selected_airpad_location(
+def _wait_for_airpad_booking_view(
     page: _AirpadPage, frame: _AirpadFrame, label: str, timeout_ms: int
 ) -> None:
     for _ in range(max(1, timeout_ms // 100)):
-        cards = frame.locator(".activity-card")
-        selected: list[_AirpadLocator] = []
-        for index in range(cards.count()):
-            card = cards.nth(index)
-            classes = (card.get_attribute("class") or "").split()
-            if card.is_visible() and (
-                card.get_attribute("aria-selected") == "true"
-                or "active" in classes
-                or "selected" in classes
-            ):
-                selected.append(card)
-        if len(selected) == 1 and selected[0].inner_text().strip() == label:
+        dom = _dom_mapping(frame.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT))
+        visible_text = dom.get("visible_text")
+        if (
+            dom.get("view") == "booking"
+            and isinstance(visible_text, str)
+            and label.casefold() in visible_text.casefold()
+        ):
             return
         page.wait_for_timeout(100)
-    raise AirpadBrowserError("visible AIRPAD selected location did not match requested location")
+    raise AirpadBrowserError("visible AIRPAD booking view did not match requested location")
 
 
 def _airpad_frame(page: _AirpadPage, timeout_ms: int) -> _AirpadFrame:
     for _ in range(max(1, timeout_ms // 100)):
-        frames = [frame for frame in page.frames if frame.url.startswith(_AIRPAD_BROWSER_URL_PREFIX)]
+        frames = [
+            frame for frame in page.frames if frame.url.startswith(_AIRPAD_BROWSER_URL_PREFIX)
+        ]
         if len(frames) == 1:
             return frames[0]
         if len(frames) > 1:
@@ -411,15 +464,18 @@ def _wait_for_airpad_date(
                 if loading_observed:
                     page.wait_for_timeout(100)
                     continue
+            active_label_matches = _airpad_active_date_matches(
+                dom.get("active_date_label"), requested_date
+            )
+            refresh_observed = refresh_observed or active_label_matches
             if (
-                dom.get("date") == requested_date.isoformat()
-                and (
-                    not require_refresh
-                    or refresh_observed
-                    or _airpad_grid(dom) != previous_grid
-                )
+                _airpad_grid_ready(dom)
+                and _airpad_payload_date(dom, requested_date) == requested_date.isoformat()
+                and (not require_refresh or refresh_observed or _airpad_grid(dom) != previous_grid)
             ):
-                return dom
+                if dom.get("date") == requested_date.isoformat():
+                    return dom
+                return {**dom, "date": requested_date.isoformat()}
         page.wait_for_timeout(100)
     raise AirpadBrowserError("timed out waiting for the requested AIRPAD date")
 
@@ -428,7 +484,7 @@ def _select_airpad_date(
     page: _AirpadPage, frame: _AirpadFrame, requested_date: date, timeout_ms: int
 ) -> object:
     previous_payload = frame.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT)
-    previous_date = _airpad_payload_date(previous_payload)
+    previous_date = _airpad_payload_date(previous_payload, requested_date)
     _airpad_visible_locator(frame, ".btn-date-calendar").click()
     label = _airpad_date_label(requested_date)
     _airpad_visible_locator(frame, f'button.days-btn[aria-label="{label}"]').click()
@@ -442,10 +498,31 @@ def _select_airpad_date(
     )
 
 
-def _airpad_payload_date(payload: object) -> str | None:
+def _airpad_active_date_matches(label: object, requested_date: date) -> bool:
+    if not isinstance(label, str):
+        return False
+    parts = " ".join(label.split()).replace(",", "").split()
+    expected = (
+        _AIRPAD_WEEKDAYS[requested_date.weekday()],
+        str(requested_date.day),
+        _AIRPAD_MONTHS[requested_date.month - 1][:3],
+    )
+    return len(parts) == 3 and tuple(part.casefold() for part in parts) == tuple(
+        part.casefold() for part in expected
+    )
+
+
+def _airpad_payload_date(payload: object, requested_date: date | None = None) -> str | None:
     if not isinstance(payload, Mapping):
         return None
-    value = cast(Mapping[str, object], payload).get("date")
+    dom = cast(Mapping[str, object], payload)
+    value = dom.get("date")
+    if isinstance(value, str) and value:
+        return value
+    if requested_date is not None and _airpad_active_date_matches(
+        dom.get("active_date_label"), requested_date
+    ):
+        return requested_date.isoformat()
     return value if isinstance(value, str) else None
 
 
@@ -454,6 +531,18 @@ def _airpad_grid(payload: object) -> tuple[object, object, object, object] | Non
         return None
     dom = cast(Mapping[str, object], payload)
     return (dom.get("slots"), dom.get("empty_grid"), dom.get("empty_rows"), dom.get("invalid_rows"))
+
+
+def _airpad_grid_ready(payload: object) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    dom = cast(Mapping[str, object], payload)
+    raw_slots = dom.get("slots")
+    return dom.get("invalid_rows") is False and (
+        dom.get("empty_grid") is True
+        or isinstance(raw_slots, list)
+        and bool(cast(list[object], raw_slots))
+    )
 
 
 def _airpad_time_range_label(frame: _AirpadFrame) -> str:
@@ -467,24 +556,37 @@ def _airpad_time_range_label(frame: _AirpadFrame) -> str:
 def _advance_airpad_time_range(
     page: _AirpadPage,
     frame: _AirpadFrame,
+    requested_date: date,
     previous_label: str,
     timeout_ms: int,
 ) -> tuple[str, object]:
     _airpad_visible_locator(frame, ".btn-arrow-right").click()
     payload: object = None
+    range_changed = False
     for _ in range(max(1, timeout_ms // 100)):
         page.wait_for_timeout(100)
         label = _airpad_time_range_label(frame)
         payload = frame.evaluate(_AIRPAD_VISIBLE_DOM_SCRIPT)
         if label != previous_label:
-            return label, payload
+            range_changed = True
+            if not _airpad_grid_ready(payload):
+                continue
+            if _airpad_payload_date(payload, requested_date) != requested_date.isoformat():
+                raise AirpadBrowserError("visible AIRPAD date changed during time-range navigation")
+            dom = _dom_mapping(payload)
+            if dom.get("date") == requested_date.isoformat():
+                return label, payload
+            return label, {**dom, "date": requested_date.isoformat()}
+    if range_changed:
+        raise AirpadBrowserError("timed out waiting for the refreshed AIRPAD time range")
     return previous_label, payload
 
 
 def _airpad_locator_is_disabled(locator: _AirpadLocator) -> bool:
-    return locator.get_attribute("disabled") is not None or locator.get_attribute(
-        "aria-disabled"
-    ) == "true"
+    return (
+        locator.get_attribute("disabled") is not None
+        or locator.get_attribute("aria-disabled") == "true"
+    )
 
 
 def _collect_airpad_date(
@@ -510,6 +612,7 @@ def _collect_airpad_date(
         _, payload = _advance_airpad_time_range(
             page,
             frame,
+            requested_date,
             range_label,
             timeout_ms,
         )
@@ -618,12 +721,14 @@ class AirpadBrowserConnector:
                 try:
                     page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
                     frame = _airpad_frame(page, self._timeout_ms)
-                    _airpad_exact_visible_locator(frame, ".item-title", "1.Terrains").click()
+                    _wait_for_exact_visible_locator(
+                        page, frame, ".item-title", "1.Terrains", self._timeout_ms
+                    ).click()
                     label = AIRPAD_LOCATION_LABELS[location.location_id]
                     _wait_for_exact_visible_locator(
                         page, frame, ".activity-card", label, self._timeout_ms
                     ).click()
-                    _wait_for_selected_airpad_location(page, frame, label, self._timeout_ms)
+                    _wait_for_airpad_booking_view(page, frame, label, self._timeout_ms)
                     _wait_for_visible_locator(page, frame, ".btn-date-calendar", self._timeout_ms)
                     _wait_for_visible_locator(page, frame, ".select-time-range", self._timeout_ms)
                     current_date = window_start

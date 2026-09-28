@@ -5,11 +5,21 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .collector import collect_airpad, collect_everness, collect_playtomic
+from .collector import (
+    collect_airpad,
+    collect_everness,
+    collect_matchpoint,
+    collect_padelfirst,
+    collect_playtomic,
+    collect_plugin,
+)
 from .connectors.airpad import load_airpad_sources
 from .connectors.everness import load_everness_sources
+from .connectors.matchpoint import load_matchpoint_sources
+from .connectors.padelfirst import load_padelfirst_sources
 from .connectors.playtomic import load_playtomic_sources
 from .connectors.playtomic_browser import _CHROMIUM_ARGS  # pyright: ignore[reportPrivateUsage]
+from .connectors.plugin import load_plugin_sources
 from .database import (
     connect,
     get_availability_snapshot,
@@ -95,9 +105,7 @@ def _parser() -> argparse.ArgumentParser:
         "collect-airpad", help="collect public AIRPAD availability manually"
     )
     airpad_command.add_argument("--database", required=True, type=Path)
-    airpad_command.add_argument(
-        "--sources", type=Path, default=Path("data/airpad_sources.json")
-    )
+    airpad_command.add_argument("--sources", type=Path, default=Path("data/airpad_sources.json"))
     airpad_command.add_argument("--location-id")
     airpad_command.add_argument("--days", type=_positive_days, default=14)
 
@@ -110,6 +118,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     everness_command.add_argument("--location-id")
     everness_command.add_argument("--days", type=_positive_days, default=14)
+
+    padelfirst_command = commands.add_parser(
+        "collect-padelfirst", help="collect public Padel First availability manually"
+    )
+    padelfirst_command.add_argument("--database", required=True, type=Path)
+    padelfirst_command.add_argument(
+        "--sources", type=Path, default=Path("data/padelfirst_sources.json")
+    )
+    padelfirst_command.add_argument("--location-id")
+    padelfirst_command.add_argument("--days", type=_positive_days, default=14)
+
+    matchpoint_command = commands.add_parser(
+        "collect-matchpoint", help="collect public Matchpoint availability manually"
+    )
+    matchpoint_command.add_argument("--database", required=True, type=Path)
+    matchpoint_command.add_argument(
+        "--sources", type=Path, default=Path("data/matchpoint_sources.json")
+    )
+    matchpoint_command.add_argument("--location-id")
+    matchpoint_command.add_argument("--days", type=_positive_days, default=14)
+
+    plugin_command = commands.add_parser(
+        "collect-plugin", help="collect public Plugin.ch availability manually"
+    )
+    plugin_command.add_argument("--database", required=True, type=Path)
+    plugin_command.add_argument("--sources", type=Path, default=Path("data/plugin_sources.json"))
+    plugin_command.add_argument("--location-id")
+    plugin_command.add_argument("--days", type=_positive_days, default=14)
     return parser
 
 
@@ -135,9 +171,7 @@ def _run_command(arguments: argparse.Namespace) -> None:
         if arguments.command == "build-catalog":
             candidates = load_candidates(arguments.candidates)
             locations = load_locations(arguments.verified)
-            verified_at = json.loads(
-                arguments.verified.read_text(encoding="utf-8")
-            )["verified_at"]
+            verified_at = json.loads(arguments.verified.read_text(encoding="utf-8"))["verified_at"]
             timestamp = _timestamp(verified_at)
             build_catalog(
                 connection,
@@ -264,6 +298,99 @@ def _run_command(arguments: argparse.Namespace) -> None:
                     f"last_success={last_success or 'none'}"
                 )
             return
+        if arguments.command == "collect-padelfirst":
+            sources = load_padelfirst_sources(arguments.sources)
+            if any(
+                source.status == "public"
+                and (arguments.location_id is None or source.location_id == arguments.location_id)
+                for source in sources
+            ):
+                _check_playwright_runtime()
+            outcomes = collect_padelfirst(
+                connection,
+                list_locations(connection),
+                sources,
+                horizon_days=arguments.days,
+                location_id=arguments.location_id,
+            )
+            for outcome in outcomes:
+                error = " ".join((outcome.error or "none").split())[:160]
+                snapshot = get_availability_snapshot(connection, outcome.location_id)
+                status = snapshot.status if snapshot is not None else outcome.status
+                slot_count = (
+                    len(snapshot.slots)
+                    if snapshot is not None and snapshot.status == "stale"
+                    else outcome.slot_count
+                )
+                last_success = snapshot.last_success_at if snapshot is not None else None
+                print(
+                    f"{outcome.location_id} status={status} slots={slot_count} "
+                    f"window={outcome.window_start}..{outcome.window_end} error={error} "
+                    f"last_success={last_success or 'none'}"
+                )
+            return
+        if arguments.command == "collect-matchpoint":
+            sources = load_matchpoint_sources(arguments.sources)
+            if any(
+                source.status == "public"
+                and (arguments.location_id is None or source.location_id == arguments.location_id)
+                for source in sources
+            ):
+                _check_playwright_runtime()
+            outcomes = collect_matchpoint(
+                connection,
+                list_locations(connection),
+                sources,
+                horizon_days=arguments.days,
+                location_id=arguments.location_id,
+            )
+            for outcome in outcomes:
+                error = " ".join((outcome.error or "none").split())[:160]
+                snapshot = get_availability_snapshot(connection, outcome.location_id)
+                status = snapshot.status if snapshot is not None else outcome.status
+                slot_count = (
+                    len(snapshot.slots)
+                    if snapshot is not None and snapshot.status == "stale"
+                    else outcome.slot_count
+                )
+                last_success = snapshot.last_success_at if snapshot is not None else None
+                print(
+                    f"{outcome.location_id} status={status} slots={slot_count} "
+                    f"window={outcome.window_start}..{outcome.window_end} error={error} "
+                    f"last_success={last_success or 'none'}"
+                )
+            return
+        if arguments.command == "collect-plugin":
+            sources = load_plugin_sources(arguments.sources)
+            if any(
+                source.status == "public"
+                and (arguments.location_id is None or source.location_id == arguments.location_id)
+                for source in sources
+            ):
+                _check_playwright_runtime()
+            outcomes = collect_plugin(
+                connection,
+                list_locations(connection),
+                sources,
+                horizon_days=arguments.days,
+                location_id=arguments.location_id,
+            )
+            for outcome in outcomes:
+                error = " ".join((outcome.error or "none").split())[:160]
+                snapshot = get_availability_snapshot(connection, outcome.location_id)
+                status = snapshot.status if snapshot is not None else outcome.status
+                slot_count = (
+                    len(snapshot.slots)
+                    if snapshot is not None and snapshot.status == "stale"
+                    else outcome.slot_count
+                )
+                last_success = snapshot.last_success_at if snapshot is not None else None
+                print(
+                    f"{outcome.location_id} status={status} slots={slot_count} "
+                    f"window={outcome.window_start}..{outcome.window_end} error={error} "
+                    f"last_success={last_success or 'none'}"
+                )
+            return
         raise ValueError(f"unsupported command: {arguments.command}")
     finally:
         connection.close()
@@ -274,7 +401,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = parser.parse_args(argv)
     except SystemExit as error:
-        return int(error.code)
+        return int(error.code or 0)
     try:
         _run_command(arguments)
     except (ModuleNotFoundError, _PlaywrightSetupError) as error:
@@ -282,7 +409,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise
         print(
             "error: Playwright is required for browser collection; run "
-            "`uv sync --group browser` and `uv run playwright install chromium`",
+            "`uv sync --dev --group browser` and "
+            "`uv run playwright install --with-deps chromium`",
             file=sys.stderr,
         )
         return 2

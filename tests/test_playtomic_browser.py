@@ -1,4 +1,3 @@
-import os
 import re
 from dataclasses import FrozenInstanceError
 from datetime import date
@@ -25,7 +24,6 @@ from padel_availability.connectors.playtomic_browser import (
 from padel_availability.models import ModelError
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "playtomic" / "dom"
-FONTCONFIG_FILE = Path(__file__).parent / "fixtures" / "fontconfig.conf"
 FIXTURE_NAMES = (
     "padel-station",
     "gva-palexpo",
@@ -43,30 +41,22 @@ def fixture_browser() -> Any:
     except ImportError as error:
         pytest.skip(f"Playwright is unavailable: {error}")
 
-    previous_fontconfig = os.environ.get("FONTCONFIG_FILE")
-    font_dir = Path("/tmp/opencode/playwright-libs/usr/share/fonts")
-    if font_dir.is_dir():
-        os.environ["FONTCONFIG_FILE"] = str(FONTCONFIG_FILE)
     playwright = sync_playwright().start()
     browser = None
     try:
         try:
             browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_ARGS))
         except (OSError, PlaywrightError) as error:
-            pytest.skip(
-                "Playwright is installed but Chromium could not launch. Install Chromium's "
-                "shared libraries or set LD_LIBRARY_PATH to the browser runtime, then retry. "
-                f"Original error: {error}"
+            pytest.fail(
+                "Playwright is installed but Chromium could not launch. Run "
+                "`uv sync --dev --group browser` and "
+                f"`uv run playwright install --with-deps chromium`. Original error: {error}"
             )
         yield browser
     finally:
         if browser is not None:
             browser.close()
         playwright.stop()
-        if previous_fontconfig is None:
-            os.environ.pop("FONTCONFIG_FILE", None)
-        else:
-            os.environ["FONTCONFIG_FILE"] = previous_fontconfig
 
 
 class _HtmlElement:
@@ -93,8 +83,7 @@ class _HtmlElement:
                 if element.tag == "div"
                 and _has_class(element, "truncate")
                 and any(
-                    ancestor.tag == "div"
-                    and _has_class(ancestor, "shrink-0")
+                    ancestor.tag == "div" and _has_class(ancestor, "shrink-0")
                     for ancestor in _ancestors(element)
                 )
             ]
@@ -136,7 +125,22 @@ class _FixtureParser(HTMLParser):
             self.current,
         )
         self.current.children.append(element)
-        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+        if tag not in {
+            "area",
+            "base",
+            "br",
+            "col",
+            "embed",
+            "hr",
+            "img",
+            "input",
+            "link",
+            "meta",
+            "param",
+            "source",
+            "track",
+            "wbr",
+        }:
             self.current = element
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -191,9 +195,7 @@ def _matches_selector(element: _HtmlElement, selector: str) -> bool:
         return element.tag == "input" and element.get_attribute("type") == "date"
     if selector == "div.flex.border-b":
         return (
-            element.tag == "div"
-            and _has_class(element, "flex")
-            and _has_class(element, "border-b")
+            element.tag == "div" and _has_class(element, "flex") and _has_class(element, "border-b")
         )
     if selector == "[data-tracking-property-time][data-tracking-property-duration]":
         return element.tag != "#document" and all(
@@ -379,9 +381,7 @@ class _FakeBrowser:
 
 @pytest.mark.parametrize("fixture_name", FIXTURE_NAMES)
 def test_observed_fixture_returns_a_visible_slot(fixture_name: str) -> None:
-    observations = parse_visible_dom(
-        _fixture_payload(fixture_name), date(2026, 9, 22)
-    )
+    observations = parse_visible_dom(_fixture_payload(fixture_name), date(2026, 9, 22))
 
     assert len(observations) == 1
     assert observations[0].court_label
@@ -637,7 +637,7 @@ def test_loaded_empty_grid_requires_refresh_for_a_changed_date() -> None:
 
 
 def test_first_loaded_empty_grid_can_follow_the_initial_booking_shell() -> None:
-    initial_payload = {
+    initial_payload: dict[str, object] = {
         "view": "unknown",
         "date": "",
         "dates": [],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Self, cast
@@ -9,9 +10,9 @@ import pytest
 from padel_availability.connectors.playtomic_browser import BrowserFactory
 from padel_availability.connectors.plugin import PluginSource
 from padel_availability.connectors.plugin_browser import (
-    _PLUGIN_COOKIE_CONTROL_SCRIPT,
-    _PLUGIN_NEXT_CONTROL_SCRIPT,
-    _PLUGIN_VISIBLE_DOM_SCRIPT,
+    _PLUGIN_COOKIE_CONTROL_SCRIPT,  # pyright: ignore[reportPrivateUsage]
+    _PLUGIN_NEXT_CONTROL_SCRIPT,  # pyright: ignore[reportPrivateUsage]
+    _PLUGIN_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     PluginBrowserConnector,
     PluginBrowserError,
     parse_plugin_dom,
@@ -49,15 +50,18 @@ def _payload() -> dict[str, Any]:
 
 
 class _FakePluginLocator:
-    def __init__(self, page: _FakePluginPage, selector: str) -> None:
+    def __init__(self, page: _FakePluginPage, selector: str, index: int | None = None) -> None:
         self.page = page
         self.selector = selector
+        self.index = index
 
     def count(self) -> int:
         if "next" in self.selector.casefold():
             return 1
         if "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
             return int(self.page.cookie_visible)
+        if self.selector == "select":
+            return 2 if self.index is None else 1
         return 0
 
     def is_visible(self) -> bool:
@@ -70,6 +74,13 @@ class _FakePluginLocator:
         elif "decline" in self.selector.casefold() or "refuser" in self.selector.casefold():
             self.page.cookie_visible = False
 
+    def nth(self, index: int) -> _FakePluginLocator:
+        return _FakePluginLocator(self.page, self.selector, index)
+
+    def select_option(self, *, label: str) -> None:
+        self.page.activity_selects.append(label)
+        self.page.activity = "Padel"
+
 
 class _FakePluginPage:
     def __init__(self, start: date = REQUESTED_DATE) -> None:
@@ -79,6 +90,10 @@ class _FakePluginPage:
         self.cookie_visible = False
         self.cookie_control_count = 0
         self.clicks: list[str] = []
+        self.activity = "Padel"
+        self.activity_selects: list[str] = []
+        self.empty_grid = False
+        self.transient_visible_evaluations = 0
         self.goto_args: list[tuple[str, str, int]] = []
 
     def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
@@ -88,12 +103,26 @@ class _FakePluginPage:
     def evaluate(self, script: str, _arg: object = None) -> Any:
         if ".header_date button" in script:
             return 'button[aria-label="Next day"]'
-        if "input[type=\"button\"]" in script:
+        if 'input[type="button"]' in script:
             if self.cookie_control_count > 1:
                 return "!ambiguous"
             return 'button[aria-label="Decline"]' if self.cookie_visible else ""
+        if "padel" in script.casefold():
+            return {
+                "status": "ok",
+                "index": 0,
+                "label": "Padel - 2026-2027",
+                "selected": self.activity == "Padel",
+            }
+        if script == _PLUGIN_VISIBLE_DOM_SCRIPT and self.transient_visible_evaluations:
+            self.transient_visible_evaluations -= 1
+            raise TimeoutError("navigation is still refreshing the visible document")
         payload = _payload()
         payload["date"] = self.current_date.isoformat()
+        payload["activity"] = self.activity
+        if self.empty_grid:
+            payload["slots"] = []
+            payload["empty_grid"] = True
         return payload
 
     def locator(self, selector: str) -> _FakePluginLocator:
@@ -133,7 +162,9 @@ class _FakePluginBrowser:
         return self.context
 
 
-def _connector(page: _FakePluginPage) -> tuple[PluginBrowserConnector, _FakePluginContext, _FakePluginBrowser]:
+def _connector(
+    page: _FakePluginPage,
+) -> tuple[PluginBrowserConnector, _FakePluginContext, _FakePluginBrowser]:
     context = _FakePluginContext(page)
     browser = _FakePluginBrowser(context)
     connector = PluginBrowserConnector(
@@ -161,19 +192,49 @@ def test_plugin_connector_uses_public_diary_and_visible_next_day_navigation() ->
 
     assert page.goto_args == [(SOURCE.booking_url, "commit", 15_000)]
     assert len([click for click in page.clicks if "next" in click.casefold()]) == 1
-    assert all("booking" not in click.casefold() and "slot" not in click.casefold() for click in page.clicks)
+    assert all(
+        "booking" not in click.casefold() and "slot" not in click.casefold()
+        for click in page.clicks
+    )
     assert page.closed and context.closed and browser.exited
     assert len(result.slots) == 4
+
+
+def test_plugin_connector_selects_visible_padel_activity_before_reading_grid() -> None:
+    page = _FakePluginPage()
+    page.activity = "Tennis"
+    connector, _context, _browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 27))
+    connector.close()
+
+    assert result.run.status == "success"
+    assert page.activity_selects == ["Padel - 2026-2027"]
+
+
+def test_plugin_connector_selects_padel_before_accepting_explicit_empty_grid() -> None:
+    page = _FakePluginPage()
+    page.activity = "Tennis"
+    page.empty_grid = True
+    connector, _context, _browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 27))
+
+    assert result.run.status == "success"
+    assert result.slots == ()
+    assert page.activity_selects == ["Padel - 2026-2027"]
 
 
 def test_plugin_connector_rejects_authentication_and_closes_resources() -> None:
     page = _FakePluginPage()
     original_evaluate = page.evaluate
 
-    def evaluate(script: str, arg: object = None) -> Any:
+    def evaluate(script: str, arg: object = None) -> object:
         payload = original_evaluate(script, arg)
         if isinstance(payload, dict):
-            payload["authentication_visible"] = True
+            typed_payload = cast(dict[str, Any], payload)
+            typed_payload["authentication_visible"] = True
+            return typed_payload
         return payload
 
     page.evaluate = evaluate  # type: ignore[method-assign]
@@ -190,10 +251,12 @@ def test_plugin_connector_rejects_wrong_activity_and_closes_resources() -> None:
     page = _FakePluginPage()
     original_evaluate = page.evaluate
 
-    def evaluate(script: str, arg: object = None) -> Any:
+    def evaluate(script: str, arg: object = None) -> object:
         payload = original_evaluate(script, arg)
         if isinstance(payload, dict):
-            payload["activity"] = "Tennis"
+            typed_payload = cast(dict[str, Any], payload)
+            typed_payload["activity"] = "Tennis"
+            return typed_payload
         return payload
 
     page.evaluate = evaluate  # type: ignore[method-assign]
@@ -282,6 +345,16 @@ def test_plugin_connector_waits_for_two_stable_visible_date_payloads() -> None:
     assert [slot.status for slot in result.slots] == ["unavailable", "unavailable"]
 
 
+def test_plugin_connector_retries_transient_navigation_while_waiting_for_grid() -> None:
+    page = _FakePluginPage()
+    page.transient_visible_evaluations = 1
+    connector, _context, _browser = _connector(page)
+
+    result = _collect(connector, end=date(2026, 9, 27))
+
+    assert result.run.status == "success"
+
+
 def test_plugin_connector_rejects_ambiguous_visible_cookie_controls() -> None:
     page = _FakePluginPage()
     page.cookie_visible = True
@@ -343,26 +416,26 @@ def test_partial_matrix_is_rejected_even_when_every_court_appears_elsewhere() ->
         parse_plugin_dom(payload, REQUESTED_DATE)
 
 
-@pytest.mark.parametrize(
-    ("change", "match"),
-    [
-        (lambda p: p.update(loading=True), "loading"),
-        (lambda p: p.update(authentication_visible=True), "authentication"),
-        (lambda p: p.update(activity="CAPTCHA verification"), "CAPTCHA"),
-        (lambda p: p.update(view="login"), "booking"),
-        (lambda p: p.update(date="2026-09-27"), "date"),
-        (lambda p: p.update(activity="Tennis"), "activity"),
-        (lambda p: p.update(courts=[]), "court"),
-        (lambda p: p.update(slots=p["slots"][:1]), "court"),
-        (lambda p: p["slots"].append(dict(p["slots"][0])), "duplicate"),
-        (lambda p: p["slots"][0].update(start="9:00"), "time"),
-        (lambda p: p["slots"][0].update(end="08:00"), "duration"),
-        (lambda p: p["slots"][0].update(participant="Alice"), "fields"),
-        (lambda p: p.update(empty_grid=True), "empty"),
-        (lambda p: p["slots"][0].update(state="maybe"), "state"),
-        (lambda p: p["slots"][0].pop("state"), "state"),
-    ],
+CHANGE_CASES: tuple[tuple[Callable[[dict[str, Any]], object], str], ...] = (
+    (lambda p: p.update(loading=True), "loading"),
+    (lambda p: p.update(authentication_visible=True), "authentication"),
+    (lambda p: p.update(activity="CAPTCHA verification"), "CAPTCHA"),
+    (lambda p: p.update(view="login"), "booking"),
+    (lambda p: p.update(date="2026-09-27"), "date"),
+    (lambda p: p.update(activity="Tennis"), "activity"),
+    (lambda p: p.update(courts=[]), "court"),
+    (lambda p: p.update(slots=p["slots"][:1]), "court"),
+    (lambda p: p["slots"].append(dict(p["slots"][0])), "duplicate"),
+    (lambda p: p["slots"][0].update(start="9:00"), "time"),
+    (lambda p: p["slots"][0].update(end="08:00"), "duration"),
+    (lambda p: p["slots"][0].update(participant="Alice"), "fields"),
+    (lambda p: p.update(empty_grid=True), "empty"),
+    (lambda p: p["slots"][0].update(state="maybe"), "state"),
+    (lambda p: p["slots"][0].pop("state"), "state"),
 )
+
+
+@pytest.mark.parametrize(("change", "match"), CHANGE_CASES)
 def test_rejects_untrusted_or_incomplete_visible_payload(change: Any, match: str) -> None:
     payload = _payload()
     change(payload)
@@ -410,7 +483,7 @@ def test_unrecognized_table_cell_label_is_not_guessed_as_booked() -> None:
         page = browser.new_page()
         page.set_content(FIXTURE.read_text(encoding="utf-8"))
         page.locator(".reservation tbody tr:first-child td:nth-child(2)").evaluate(
-            "element => element.textContent = 'maintenance'"
+            "element => { element.className = 'terrainTxt time_extra time_60 cursor'; element.textContent = 'maintenance'; element.style.height = '1rem'; element.style.backgroundColor = 'transparent'; }"
         )
         payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
         browser.close()
@@ -454,6 +527,75 @@ def test_time_only_terrain_cell_fails_closed_instead_of_becoming_unavailable() -
     assert payload["slots"][0]["state"] == "unrecognized"
     with pytest.raises(PluginBrowserError, match="state"):
         parse_plugin_dom(payload, REQUESTED_DATE)
+
+
+def test_visible_plugin_terrain_styles_map_open_and_occupied_cells() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".terrainTxt").nth(0).evaluate(
+            "element => { element.className = 'terrainTxt time_extra time_60'; element.textContent = ''; element.style.height = '1rem'; element.style.backgroundColor = 'transparent'; }"
+        )
+        page.locator(".terrainTxt").nth(1).evaluate(
+            "element => { element.className = 'terrainTxt time_extra time_60'; element.textContent = '10:00'; element.style.height = '1rem'; element.style.backgroundColor = 'rgb(255, 255, 0)'; }"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert [slot["state"] for slot in payload["slots"][:2]] == ["available", "unavailable"]
+    observations = parse_plugin_dom(payload, REQUESTED_DATE)
+    assert [observation.status for observation in observations[:2]] == ["available", "unavailable"]
+
+
+def test_visible_plugin_time_step_blank_cell_is_open() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".terrainTxt").first.evaluate(
+            "element => { element.className = 'terrainTxt time_30'; element.textContent = ''; element.style.height = '1rem'; element.style.backgroundColor = 'transparent'; }"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "available"
+
+
+def test_notallowed_visual_class_remains_ambiguous() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".terrainTxt").first.evaluate(
+            "element => { element.className = 'terrainTxt time_60 notallowed'; element.textContent = ''; element.style.height = '1rem'; element.style.backgroundColor = 'transparent'; }"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "unknown"
+
+
+def test_explicit_visible_state_wins_over_conflicting_visual_marker() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.locator(".terrainTxt").first.evaluate(
+            "element => { element.className = 'terrainTxt time_extra time_60 cursor'; element.textContent = 'unavailable'; element.style.height = '1rem'; element.style.backgroundColor = 'transparent'; }"
+        )
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["slots"][0]["state"] == "unavailable"
 
 
 def test_weekly_fixture_extracts_only_explicit_visible_cell_states() -> None:

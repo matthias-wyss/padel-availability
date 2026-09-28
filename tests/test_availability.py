@@ -1,5 +1,6 @@
 from dataclasses import FrozenInstanceError
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
+from typing import cast
 
 import pytest
 
@@ -9,13 +10,14 @@ from padel_availability.availability import (
     AvailabilitySlot,
     AvailabilitySnapshot,
     ModelError,
+    SlotStatus,
     local_to_utc,
     local_window,
 )
 
 
 def test_local_window_is_half_open_and_uses_zurich_date() -> None:
-    now = datetime(2026, 9, 22, 23, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 22, 23, 30, tzinfo=UTC)
 
     assert local_window(now, 14) == (date(2026, 9, 23), date(2026, 10, 7))
 
@@ -184,7 +186,7 @@ def test_availability_value_objects_are_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        setattr(run, "status", "error")
+        run.__setattr__("status", "error")
 
 
 def test_models_reject_invalid_values() -> None:
@@ -198,8 +200,8 @@ def test_models_reject_invalid_values() -> None:
             "2026-09-23T18:00:00+02:00",
             "2026-09-23T19:00:00Z",
             "Europe/Zurich",
-            "maybe",
+            cast(SlotStatus, "maybe"),
         )
 
     with pytest.raises(ModelError):
-        local_window(datetime(2026, 9, 22, tzinfo=timezone.utc), 0)
+        local_window(datetime(2026, 9, 22, tzinfo=UTC), 0)

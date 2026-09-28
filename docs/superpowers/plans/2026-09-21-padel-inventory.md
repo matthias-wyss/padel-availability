@@ -549,7 +549,9 @@ def location_with_candidate(candidate_id: str) -> LocationRecord:
     )
 
 
-def location_with_status(status: VerificationStatus, evidence: tuple[SourceEvidence, ...]) -> LocationRecord:
+def location_with_status(
+    status: VerificationStatus, evidence: tuple[SourceEvidence, ...]
+) -> LocationRecord:
     return LocationRecord(
         location_id="location-one",
         canonical_name="Example one",

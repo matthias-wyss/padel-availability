@@ -3,7 +3,6 @@ from collections.abc import Sequence
 
 from .models import CandidateMatch, LocationRecord, VerificationRun
 
-
 _TRI_STATE_LABELS = {"yes": "Oui", "no": "Non", "unknown": "Inconnu"}
 _TRI_STATE_FIELDS = (
     ("membership_required", "Adhésion requise"),
@@ -52,7 +51,11 @@ def _location_facts(location: LocationRecord) -> list[str]:
     ]
     for field, label in _TRI_STATE_FIELDS:
         facts.append(f"- {label}: {_TRI_STATE_LABELS[getattr(location, field)]}")
-    cover = "Inconnu" if location.overall_cover_status == "unknown" else _escape(location.overall_cover_status)
+    cover = (
+        "Inconnu"
+        if location.overall_cover_status == "unknown"
+        else _escape(location.overall_cover_status)
+    )
     facts.append(f"- Couverture: {cover}")
     if location.court_groups:
         courts = ", ".join(
@@ -140,7 +143,7 @@ def render_markdown_report(
 
     lines.append("## Duplicate and alias decisions")
     lines.append("### Candidate decisions")
-    decisions = []
+    decisions: list[str] = []
     for match in ordered_matches:
         target = match.location_id or "none"
         decisions.append(
@@ -149,7 +152,7 @@ def render_markdown_report(
         )
     lines.extend(decisions or ["Aucune."])
     lines.append("### Aliases")
-    aliases = []
+    aliases: list[str] = []
     for location in ordered_locations:
         if location.aliases:
             aliases.append(

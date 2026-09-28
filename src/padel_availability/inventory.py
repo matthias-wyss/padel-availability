@@ -1,10 +1,10 @@
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
-from typing import Sequence
+from typing import cast
 
 from .database import (
     create_verification_run,
@@ -21,7 +21,6 @@ from .models import (
     VerificationRun,
 )
 
-
 _CANDIDATE_FIELDS = {
     "candidate_id",
     "raw_name",
@@ -34,7 +33,7 @@ _CATALOG_FIELDS = {"format_version", "verified_at", "locations"}
 
 
 @contextmanager
-def _catalog_transaction(connection: sqlite3.Connection) -> Iterator[None]:
+def _catalog_transaction(connection: sqlite3.Connection) -> Generator[None, None, None]:
     if connection.in_transaction:
         savepoint = "catalog_build"
         connection.execute(f"SAVEPOINT {savepoint}")
@@ -58,13 +57,13 @@ def _catalog_transaction(connection: sqlite3.Connection) -> Iterator[None]:
         connection.commit()
 
 
-def validate_candidate_set(entries: Sequence[CandidateEntry]) -> None:
+def validate_candidate_set(entries: Sequence[object]) -> None:
     if not entries:
         raise ValueError("candidate set must not be empty")
     candidate_ids: set[str] = set()
     for entry in entries:
         if not isinstance(entry, CandidateEntry):
-            raise ValueError("entries must contain CandidateEntry values")
+            raise TypeError("entries must contain CandidateEntry values")
         if not entry.raw_name.strip():
             raise ValueError("raw_name must not be blank")
         if not entry.municipality.strip():
@@ -76,16 +75,17 @@ def validate_candidate_set(entries: Sequence[CandidateEntry]) -> None:
 
 def load_candidates(path: Path) -> tuple[CandidateEntry, ...]:
     with path.open(encoding="utf-8") as file:
-        payload = json.load(file)
+        payload: object = json.load(file)
     if not isinstance(payload, list):
-        raise ValueError("candidate JSON must contain a list")
+        raise TypeError("candidate JSON must contain a list")
 
     entries: list[CandidateEntry] = []
-    for index, item in enumerate(payload):
+    for index, item in enumerate(cast(list[object], payload)):
         if not isinstance(item, dict):
-            raise ValueError(f"candidate at index {index} must be an object")
-        missing = _CANDIDATE_FIELDS - item.keys()
-        unknown = item.keys() - _CANDIDATE_FIELDS
+            raise TypeError(f"candidate at index {index} must be an object")
+        row = cast(dict[str, object], item)
+        missing = _CANDIDATE_FIELDS - row.keys()
+        unknown = row.keys() - _CANDIDATE_FIELDS
         if missing:
             raise ValueError(
                 f"candidate at index {index} is missing fields: {', '.join(sorted(missing))}"
@@ -97,12 +97,12 @@ def load_candidates(path: Path) -> tuple[CandidateEntry, ...]:
         try:
             entries.append(
                 CandidateEntry(
-                    candidate_id=item["candidate_id"],
-                    raw_name=item["raw_name"],
-                    municipality=item["municipality"],
-                    courts_text=item["courts_text"],
-                    type_text=item["type_text"],
-                    access_text=item["access_text"],
+                    candidate_id=cast(str, row["candidate_id"]),
+                    raw_name=cast(str, row["raw_name"]),
+                    municipality=cast(str, row["municipality"]),
+                    courts_text=cast(str | None, row["courts_text"]),
+                    type_text=cast(str | None, row["type_text"]),
+                    access_text=cast(str | None, row["access_text"]),
                 )
             )
         except (TypeError, ValueError) as error:
@@ -113,22 +113,24 @@ def load_candidates(path: Path) -> tuple[CandidateEntry, ...]:
 
 def load_locations(path: Path) -> tuple[LocationRecord, ...]:
     with path.open(encoding="utf-8") as file:
-        payload = json.load(file)
+        payload: object = json.load(file)
     if not isinstance(payload, dict):
         raise ModelError("verified catalog JSON must contain an object")
-    missing = _CATALOG_FIELDS - payload.keys()
-    unknown = payload.keys() - _CATALOG_FIELDS
+    catalog = cast(dict[str, object], payload)
+    missing = _CATALOG_FIELDS - catalog.keys()
+    unknown = catalog.keys() - _CATALOG_FIELDS
     if missing:
         raise ModelError(f"catalog is missing fields: {', '.join(sorted(missing))}")
     if unknown:
         raise ModelError(f"catalog has unknown fields: {', '.join(sorted(unknown))}")
+    format_version = catalog["format_version"]
     if (
-        not isinstance(payload["format_version"], int)
-        or isinstance(payload["format_version"], bool)
-        or payload["format_version"] != 1
+        not isinstance(format_version, int)
+        or isinstance(format_version, bool)
+        or format_version != 1
     ):
         raise ModelError("format_version must be 1")
-    verified_at = payload["verified_at"]
+    verified_at = catalog["verified_at"]
     if not isinstance(verified_at, str):
         raise ModelError("verified_at must be an ISO date")
     try:
@@ -137,18 +139,18 @@ def load_locations(path: Path) -> tuple[LocationRecord, ...]:
         raise ModelError("verified_at must be an ISO date") from error
     if parsed_date.isoformat() != verified_at:
         raise ModelError("verified_at must be an ISO date")
-    raw_locations = payload["locations"]
+    raw_locations = catalog["locations"]
     if not isinstance(raw_locations, list):
         raise ModelError("locations must be a list")
 
     locations: list[LocationRecord] = []
     location_ids: set[str] = set()
     candidate_ids: set[str] = set()
-    for index, item in enumerate(raw_locations):
+    for index, item in enumerate(cast(list[object], raw_locations)):
         if not isinstance(item, dict):
             raise ModelError(f"location at index {index} must be an object")
         try:
-            location = LocationRecord.from_mapping(item)
+            location = LocationRecord.from_mapping(cast(dict[str, object], item))
         except (TypeError, ValueError) as error:
             raise ModelError(f"invalid location at index {index}") from error
         if location.location_id in location_ids:
@@ -165,17 +167,13 @@ def load_locations(path: Path) -> tuple[LocationRecord, ...]:
     return tuple(locations)
 
 
-def validate_verified_catalog(
-    candidates: Sequence[CandidateEntry], locations: Sequence[LocationRecord]
-) -> None:
+def validate_verified_catalog(candidates: Sequence[object], locations: Sequence[object]) -> None:
     try:
         validate_candidate_set(candidates)
-    except ValueError as error:
+    except (TypeError, ValueError) as error:
         raise ModelError(str(error)) from error
     candidate_ids: set[str] = set()
-    for candidate in candidates:
-        if not isinstance(candidate, CandidateEntry):
-            raise ModelError("candidates must contain CandidateEntry values")
+    for candidate in cast(Sequence[CandidateEntry], candidates):
         if candidate.candidate_id in candidate_ids:
             raise ModelError(f"duplicate candidate_id: {candidate.candidate_id}")
         candidate_ids.add(candidate.candidate_id)
@@ -255,9 +253,7 @@ def validate_verified_catalog(
 
     missing = candidate_ids - assigned.keys()
     if missing:
-        raise ModelError(
-            "candidates missing from verified catalog: " + ", ".join(sorted(missing))
-        )
+        raise ModelError("candidates missing from verified catalog: " + ", ".join(sorted(missing)))
     unexpected = assigned.keys() - candidate_ids
     if unexpected:
         raise ModelError(

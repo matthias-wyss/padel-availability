@@ -25,6 +25,7 @@ from padel_availability.collector import (
     collect_everness,
     collect_padelfirst,
     collect_playtomic,
+    collect_plugin,
 )
 from padel_availability.connectors.airpad import (
     AirpadSource,
@@ -66,6 +67,15 @@ from padel_availability.connectors.playtomic import (
     load_playtomic_sources,
 )
 from padel_availability.connectors.playtomic_browser import PlaytomicBrowserError
+from padel_availability.connectors.plugin import (
+    PLUGIN_LOCATION_IDS,
+    PluginSource,
+    load_plugin_sources,
+)
+from padel_availability.connectors.plugin_browser import (
+    PluginBrowserConnectorFactory,
+    PluginBrowserError,
+)
 from padel_availability.database import (
     connect,
     get_availability_snapshot,
@@ -289,6 +299,62 @@ def ready_matchpoint_database(tmp_path: Path) -> sqlite3.Connection:
     for location in locations:
         upsert_location(connection, location)
     return connection
+
+
+def plugin_locations() -> tuple[LocationRecord, ...]:
+    locations = load_locations(ROOT / "data/verified_locations.json")
+    by_id = {location.location_id: location for location in locations}
+    return tuple(by_id[location_id] for location_id in sorted(PLUGIN_LOCATION_IDS))
+
+
+def plugin_sources() -> tuple[PluginSource, ...]:
+    return load_plugin_sources(ROOT / "data/plugin_sources.json")
+
+
+def ready_plugin_database(tmp_path: Path) -> sqlite3.Connection:
+    connection = connect(tmp_path / "catalog.sqlite3")
+    initialize(connection)
+    locations = plugin_locations()
+    candidate_ids = {
+        candidate_id for location in locations for candidate_id in location.candidate_ids
+    }
+    candidates = load_candidates(ROOT / "data/candidates.json")
+    insert_candidates(
+        connection,
+        tuple(candidate for candidate in candidates if candidate.candidate_id in candidate_ids),
+    )
+    for location in locations:
+        upsert_location(connection, location)
+    return connection
+
+
+def _plugin_result(
+    location: LocationRecord,
+    source: PluginSource,
+    *,
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    collected_at: str,
+    status: AvailabilityRunStatus = "success",
+    slots: tuple[AvailabilitySlot, ...] = (),
+    error: str | None = None,
+) -> AvailabilityResult:
+    return AvailabilityResult(
+        AvailabilityRun(
+            run_id,
+            location.location_id,
+            "plugin_browser",
+            source.booking_url,
+            window_start.isoformat(),
+            window_end.isoformat(),
+            (window_end - window_start).days,
+            collected_at,
+            status,
+            error,
+        ),
+        slots,
+    )
 
 
 def _collect_matchpoint(
@@ -1350,6 +1416,281 @@ def test_matchpoint_collection_persists_browser_startup_error_and_closes(
         assert [outcome.status for outcome in outcomes] == ["error"] * 4
         assert [outcome.error for outcome in outcomes] == ["browser startup failed"] * 4
         assert len(list_availability_runs(connection)) == 4
+    finally:
+        connection.close()
+
+
+def test_plugin_collection_uses_zurich_windows_sorts_and_persists_all_locations(
+    tmp_path: Path,
+) -> None:
+    connection = ready_plugin_database(tmp_path)
+    locations = plugin_locations()
+    sources = plugin_sources()
+    received_sources: list[Sequence[PluginSource]] = []
+    calls: list[tuple[str, date, date]] = []
+
+    def browser_factory(supplied_sources: Sequence[PluginSource]):
+        received_sources.append(supplied_sources)
+
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                calls.append((location.location_id, window_start, window_end))
+                source = next(item for item in sources if item.location_id == location.location_id)
+                return _plugin_result(
+                    location,
+                    source,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            tuple(reversed(locations)),
+            sources,
+            now=datetime(2026, 9, 24, 22, 30, tzinfo=UTC),
+            horizon_days=2,
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+        expected_ids = sorted(PLUGIN_LOCATION_IDS)
+        assert received_sources == [sources]
+        assert [item[0] for item in calls] == expected_ids
+        assert all(item[1:] == (date(2026, 9, 25), date(2026, 9, 27)) for item in calls)
+        assert [outcome.location_id for outcome in outcomes] == expected_ids
+        assert all(
+            outcome.run_id.startswith(f"plugin-{outcome.location_id}-") for outcome in outcomes
+        )
+        assert len(list_availability_runs(connection)) == 8
+    finally:
+        connection.close()
+
+
+def test_plugin_collection_selects_one_location_and_validates_catalog_ids(
+    tmp_path: Path,
+) -> None:
+    connection = ready_plugin_database(tmp_path)
+    locations, sources = plugin_locations(), plugin_sources()
+    selected_id = "gland"
+    calls: list[str] = []
+
+    def browser_factory(_: Sequence[PluginSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(self, location: LocationRecord, **kwargs: object) -> AvailabilityResult:
+                calls.append(location.location_id)
+                return _plugin_result(
+                    location,
+                    next(
+                        source for source in sources if source.location_id == location.location_id
+                    ),
+                    run_id=cast(str, kwargs["run_id"]),
+                    window_start=cast(date, kwargs["window_start"]),
+                    window_end=cast(date, kwargs["window_end"]),
+                    collected_at=cast(str, kwargs["collected_at"]),
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            locations,
+            sources,
+            location_id=selected_id,
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+        assert calls == [selected_id]
+        assert [outcome.location_id for outcome in outcomes] == [selected_id]
+        with pytest.raises(ValueError, match="unknown Plugin location: unknown"):
+            collect_plugin(connection, locations, sources, location_id="unknown")
+        with pytest.raises(ValueError, match="location is missing from catalog: gland"):
+            collect_plugin(
+                connection,
+                tuple(location for location in locations if location.location_id != selected_id),
+                sources,
+                location_id=selected_id,
+            )
+        with pytest.raises(ValueError, match="catalog is missing Plugin locations: gland"):
+            collect_plugin(
+                connection,
+                tuple(location for location in locations if location.location_id != selected_id),
+                sources,
+            )
+    finally:
+        connection.close()
+
+
+def test_plugin_startup_error_is_bounded_persisted_for_all_and_closes(
+    tmp_path: Path,
+) -> None:
+    connection = ready_plugin_database(tmp_path)
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[PluginSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise PluginBrowserError("x" * 300)
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(self, *_args: object, **_kwargs: object) -> AvailabilityResult:
+                raise AssertionError("collect should not run after startup failure")
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            plugin_locations(),
+            plugin_sources(),
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+        assert lifecycle == ["open", "close"]
+        assert len(outcomes) == 8
+        assert all(
+            outcome.status == "error" and len(outcome.error or "") <= 160 for outcome in outcomes
+        )
+        assert len(list_availability_runs(connection)) == 8
+    finally:
+        connection.close()
+
+
+def test_plugin_startup_failure_never_collects_any_selected_source(tmp_path: Path) -> None:
+    connection = ready_plugin_database(tmp_path)
+    sources = tuple(
+        replace(source, status="unavailable")
+        if source.location_id == "collonge-bellerive"
+        else source
+        for source in plugin_sources()
+    )
+    sources_by_id = {source.location_id: source for source in sources}
+    lifecycle: list[str] = []
+    collect_calls: list[str] = []
+
+    def browser_factory(_: Sequence[PluginSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+                raise PluginBrowserError("browser startup failed")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                collect_calls.append(location.location_id)
+                return _plugin_result(
+                    location,
+                    sources_by_id[location.location_id],
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                    status="unavailable",
+                    error="source unavailable",
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            plugin_locations(),
+            sources,
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+        assert collect_calls == []
+        assert lifecycle == ["open", "close"]
+        assert len(outcomes) == 8
+        assert all(outcome.status == "error" for outcome in outcomes)
+        assert all(outcome.error == "browser startup failed" for outcome in outcomes)
+        assert len(list_availability_runs(connection)) == 8
+    finally:
+        connection.close()
+
+
+def test_plugin_unavailable_source_skips_browser_startup(tmp_path: Path) -> None:
+    connection = ready_plugin_database(tmp_path)
+    locations = plugin_locations()
+    unavailable = replace(plugin_sources()[0], status="unavailable")
+    location = next(item for item in locations if item.location_id == unavailable.location_id)
+
+    lifecycle: list[str] = []
+
+    def browser_factory(_: Sequence[PluginSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                lifecycle.append("open")
+
+            def close(self) -> None:
+                lifecycle.append("close")
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                return _plugin_result(
+                    received_location,
+                    unavailable,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                    status="unavailable",
+                    error="public Plugin booking diary is unavailable",
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            locations,
+            (unavailable,),
+            location_id=unavailable.location_id,
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+        assert location.location_id == outcomes[0].location_id
+        assert outcomes[0].status == "unavailable"
+        assert lifecycle == ["close"]
+        assert len(list_availability_runs(connection)) == 1
     finally:
         connection.close()
 

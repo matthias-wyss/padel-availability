@@ -1,9 +1,10 @@
 import hashlib
 import json
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Callable, Literal, Sequence
+from typing import Literal, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -12,10 +13,22 @@ from ..availability import (
     AvailabilityResult,
     AvailabilityRun,
     AvailabilitySlot,
+    SlotStatus,
     local_to_utc,
 )
-from ..models import LocationRecord, ModelError, _text, _url, _utc_timestamp
-
+from ..models import (
+    LocationRecord,
+    ModelError,
+)
+from ..models import (
+    validate_text as _text,
+)
+from ..models import (
+    validate_url as _url,
+)
+from ..models import (
+    validate_utc_timestamp as _utc_timestamp,
+)
 
 JsonFetcher = Callable[[str], object]
 TransportKind = Literal["json", "browser_dom"]
@@ -84,22 +97,35 @@ def _source_error(message: str) -> PlaytomicSourceError:
 
 def load_playtomic_sources(path: Path) -> tuple[PlaytomicSource, ...]:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise _source_error("could not read Playtomic source manifest") from error
 
-    if not isinstance(raw, dict) or set(raw) != {"format_version", "sources"}:
+    if not isinstance(raw, dict):
         raise _source_error("source manifest must contain format_version and sources")
-    if raw["format_version"] != 1 or isinstance(raw["format_version"], bool):
+    manifest = cast(dict[str, object], raw)
+    if set(manifest) != {"format_version", "sources"}:
+        raise _source_error("source manifest must contain format_version and sources")
+    format_version = manifest["format_version"]
+    if (
+        not isinstance(format_version, int)
+        or isinstance(format_version, bool)
+        or format_version != 1
+    ):
         raise _source_error("source manifest format_version must be 1")
-    if not isinstance(raw["sources"], list):
+    raw_sources = manifest["sources"]
+    if not isinstance(raw_sources, list):
         raise _source_error("source manifest sources must be a list")
-    if len(raw["sources"]) != len(_EXPECTED_LOCATION_IDS):
+    source_rows = cast(list[object], raw_sources)
+    if len(source_rows) != len(_EXPECTED_LOCATION_IDS):
         raise _source_error("source manifest must contain exactly five rows")
 
     sources: list[PlaytomicSource] = []
-    for row in raw["sources"]:
-        if not isinstance(row, dict) or set(row) != {
+    for raw_row in source_rows:
+        if not isinstance(raw_row, dict):
+            raise _source_error("source row has invalid fields")
+        row = cast(dict[str, object], raw_row)
+        if set(row) != {
             "location_id",
             "booking_url",
             "transport",
@@ -110,19 +136,22 @@ def load_playtomic_sources(path: Path) -> tuple[PlaytomicSource, ...]:
             raise _source_error("source row has invalid fields")
         try:
             source = PlaytomicSource(
-                row["location_id"],
-                row["booking_url"],
-                row["transport"],
-                row["availability_url_template"],
-                row["checked_at"],
-                row["status"],
+                cast(str, row["location_id"]),
+                cast(str, row["booking_url"]),
+                cast(TransportKind, row["transport"]),
+                cast(str | None, row["availability_url_template"]),
+                cast(str, row["checked_at"]),
+                cast(PlaytomicStatus, row["status"]),
             )
         except (ModelError, TypeError) as error:
             raise _source_error("source row failed validation") from error
         sources.append(source)
 
     location_ids = [source.location_id for source in sources]
-    if len(set(location_ids)) != len(location_ids) or set(location_ids) != _EXPECTED_LOCATION_IDS:
+    if (
+        len(set(location_ids)) != len(location_ids)
+        or frozenset(location_ids) != _EXPECTED_LOCATION_IDS
+    ):
         raise _source_error("source manifest must cover the exact five locations once")
     return tuple(sorted(sources, key=lambda source: source.location_id))
 
@@ -186,24 +215,33 @@ def parse_playtomic_slots(
     window_start: date,
     window_end: date,
 ) -> tuple[AvailabilitySlot, ...]:
-    if not isinstance(payload, dict) or not isinstance(payload.get("slots"), list):
+    if not isinstance(payload, dict):
+        raise _source_error("payload must contain a slots list")
+    payload_mapping = cast(dict[str, object], payload)
+    raw_slots = payload_mapping.get("slots")
+    if not isinstance(raw_slots, list):
         raise _source_error("payload must contain a slots list")
     if window_end <= window_start:
         raise _source_error("requested date window is invalid")
 
     slots: dict[str, AvailabilitySlot] = {}
-    for index, item in enumerate(payload["slots"]):
-        if not isinstance(item, dict):
+    for index, raw_item in enumerate(cast(list[object], raw_slots)):
+        if not isinstance(raw_item, dict):
             raise _source_error(f"slot {index} must be an object")
+        item = cast(dict[str, object], raw_item)
         required = {"external_id", "court_label", "starts_at", "ends_at", "status"}
         if not required.issubset(item):
             raise _source_error(f"slot {index} is missing required fields")
         external_id = item["external_id"]
         court_label = item["court_label"]
         status = item["status"]
-        if external_id is not None and (not isinstance(external_id, str) or not external_id.strip()):
+        if external_id is not None and (
+            not isinstance(external_id, str) or not external_id.strip()
+        ):
             raise _source_error(f"slot {index} has an invalid external_id")
-        if court_label is not None and (not isinstance(court_label, str) or not court_label.strip()):
+        if court_label is not None and (
+            not isinstance(court_label, str) or not court_label.strip()
+        ):
             raise _source_error(f"slot {index} has an invalid court_label")
         if not isinstance(status, str) or status not in _SLOT_STATUSES:
             raise _source_error(f"slot {index} has an invalid status")
@@ -226,7 +264,7 @@ def parse_playtomic_slots(
                 starts_at,
                 ends_at,
                 "Europe/Zurich",
-                status,
+                cast(SlotStatus, status),
             )
         except ModelError as error:
             raise _source_error(f"slot {index} failed validation") from error

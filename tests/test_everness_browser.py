@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import date
 from pathlib import Path
 from typing import Any, Self, cast
@@ -33,10 +32,6 @@ def fixture_browser() -> Any:
     except ImportError as error:
         pytest.skip(f"Playwright is unavailable: {error}")
 
-    previous_fontconfig = os.environ.get("FONTCONFIG_FILE")
-    font_dir = Path("/tmp/opencode/playwright-libs/usr/share/fonts")
-    if font_dir.is_dir():
-        os.environ["FONTCONFIG_FILE"] = str(Path(__file__).parent / "fixtures" / "fontconfig.conf")
     playwright = sync_playwright().start()
     browser = None
     try:
@@ -46,20 +41,21 @@ def fixture_browser() -> Any:
                 args=["--disable-gpu", "--disable-dev-shm-usage"],
             )
         except (OSError, PlaywrightError) as error:
-            pytest.skip(f"Chromium could not launch: {error}")
+            pytest.fail(
+                "Chromium could not launch. Run `uv sync --dev --group browser` and "
+                f"`uv run playwright install --with-deps chromium`. Original error: {error}"
+            )
         yield browser
     finally:
         if browser is not None:
             browser.close()
         playwright.stop()
-        if previous_fontconfig is None:
-            os.environ.pop("FONTCONFIG_FILE", None)
-        else:
-            os.environ["FONTCONFIG_FILE"] = previous_fontconfig
 
 
 def _browser_payload(browser: Any, name: str) -> dict[str, object]:
-    return _browser_payload_html(browser, (FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8"))
+    return _browser_payload_html(
+        browser, (FIXTURE_ROOT / f"{name}.html").read_text(encoding="utf-8")
+    )
 
 
 def _browser_payload_html(browser: Any, html: str) -> dict[str, object]:
@@ -110,7 +106,11 @@ def _payload(
 def test_everness_available_dom_extracts_visible_cells() -> None:
     observations = parse_everness_dom(
         _payload(
-            [("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "pending"]), ("12:00", ["notallowed", "cursor"])],
+            [
+                ("09:00", ["cursor", "notallowed"]),
+                ("10:30", ["cursor", "pending"]),
+                ("12:00", ["notallowed", "cursor"]),
+            ],
         ),
         REQUESTED_DATE,
     )
@@ -181,6 +181,34 @@ def test_everness_expands_visible_colspan_rows(fixture_browser: Any) -> None:
     ]
 
 
+def test_everness_expands_visible_rowspan_cells(fixture_browser: Any) -> None:
+    payload = _browser_payload(fixture_browser, "booking-rowspan")
+    rows = cast(list[dict[str, object]], payload["rows"])
+    first_cells = cast(list[dict[str, object]], rows[0]["cells"])
+    assert first_cells[0]["rowspan"] == "2"
+    assert len(cast(list[object], rows[1]["cells"])) == 2
+
+    observations = parse_everness_dom(payload, REQUESTED_DATE)
+
+    assert len(observations) == 6
+    assert [observation.court_label for observation in observations] == [
+        "Court 1",
+        "Court 2",
+        "Court 3",
+        "Court 1",
+        "Court 2",
+        "Court 3",
+    ]
+    assert [observation.status for observation in observations] == [
+        "unavailable",
+        "available",
+        "unknown",
+        "unavailable",
+        "unknown",
+        "available",
+    ]
+
+
 def test_everness_synthetic_cells_without_colspan_remain_single_span() -> None:
     observations = parse_everness_dom(
         _payload([("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "cursor"])]),
@@ -193,7 +221,10 @@ def test_everness_synthetic_cells_without_colspan_remain_single_span() -> None:
 @pytest.mark.parametrize("span", ["", "0", "-1", "1.5", "two", True, 0, -1])
 def test_everness_rejects_invalid_colspan(span: object) -> None:
     payload = _payload([("09:00", ["cursor", "notallowed"]), ("10:30", ["cursor", "cursor"])])
-    cells = cast(list[dict[str, object]], cast(dict[str, object], cast(list[object], payload["rows"])[0])["cells"])
+    cells = cast(
+        list[dict[str, object]],
+        cast(dict[str, object], cast(list[object], payload["rows"])[0])["cells"],
+    )
     cells[0]["colspan"] = span
 
     with pytest.raises(ValueError, match="span"):
@@ -302,14 +333,17 @@ def test_everness_login_or_captcha_is_bounded_error(marker: str) -> None:
 def test_everness_public_generic_login_link_is_not_blocked() -> None:
     requested = date(2026, 9, 23)
 
-    assert parse_everness_dom(
-        _payload(
-            [],
-            date_label="23 sept. 2026\nMercredi",
-            visible_text="Everness booking\nSE CONNECTER\nConnexion",
-        ),
-        requested,
-    ) == ()
+    assert (
+        parse_everness_dom(
+            _payload(
+                [],
+                date_label="23 sept. 2026\nMercredi",
+                visible_text="Everness booking\nSE CONNECTER\nConnexion",
+            ),
+            requested,
+        )
+        == ()
+    )
 
 
 @pytest.mark.parametrize(
@@ -328,14 +362,20 @@ def test_everness_unavailable_marker_is_bounded_error(marker: str) -> None:
 def test_everness_malformed_grid_is_error() -> None:
     with pytest.raises(ValueError, match="matrix"):
         parse_everness_dom(
-            _payload([("09:00", ["cursor"]), ("10:30", ["cursor", "cursor"]) ]),
+            _payload([("09:00", ["cursor"]), ("10:30", ["cursor", "cursor"])]),
             REQUESTED_DATE,
         )
 
 
 def test_everness_derives_visible_ninety_minute_duration() -> None:
     observations = parse_everness_dom(
-        _payload([("09:00", ["cursor", "cursor"]), ("10:30", ["cursor", "cursor"]), ("12:00", ["cursor", "cursor"])]),
+        _payload(
+            [
+                ("09:00", ["cursor", "cursor"]),
+                ("10:30", ["cursor", "cursor"]),
+                ("12:00", ["cursor", "cursor"]),
+            ]
+        ),
         REQUESTED_DATE,
     )
 
@@ -415,7 +455,11 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
         ["terrainTxt cursor", "terrainTxt pending"],
         ["terrainTxt notallowed", "terrainTxt cursor"],
     ]
-    assert all("external_id" not in cell for row in rows for cell in cast(list[dict[str, object]], row["cells"]))
+    assert all(
+        "external_id" not in cell
+        for row in rows
+        for cell in cast(list[dict[str, object]], row["cells"])
+    )
 
     observations = parse_everness_dom(payload, REQUESTED_DATE)
     assert [observation.status for observation in observations] == [
@@ -430,7 +474,9 @@ def test_everness_visible_script_extracts_only_sanitized_visible_dom(fixture_bro
     assert observations[-1].ends_at == "2026-09-22T13:30:00+02:00"
 
 
-def test_everness_visible_script_returns_not_ready_payload_without_body(fixture_browser: Any) -> None:
+def test_everness_visible_script_returns_not_ready_payload_without_body(
+    fixture_browser: Any,
+) -> None:
     context = fixture_browser.new_context()
     page = context.new_page()
     try:
@@ -491,12 +537,22 @@ def test_everness_visible_script_ignores_hidden_descendant_text(fixture_browser:
     assert [row["time"] for row in rows] == ["09:00", ""]
     assert [row["cells"] for row in rows] == [
         [
-            {"class": "terrainTxt cursor", "style": "", "colspan": None},
-            {"class": "terrainTxt notallowed", "style": "", "colspan": None},
+            {"class": "terrainTxt cursor", "style": "", "colspan": None, "rowspan": None},
+            {
+                "class": "terrainTxt notallowed",
+                "style": "",
+                "colspan": None,
+                "rowspan": None,
+            },
         ],
         [
-            {"class": "terrainTxt notallowed", "style": "", "colspan": None},
-            {"class": "terrainTxt cursor", "style": "", "colspan": None},
+            {
+                "class": "terrainTxt notallowed",
+                "style": "",
+                "colspan": None,
+                "rowspan": None,
+            },
+            {"class": "terrainTxt cursor", "style": "", "colspan": None, "rowspan": None},
         ],
     ]
     assert "Hidden" not in repr(payload)
@@ -546,6 +602,17 @@ def test_everness_visible_fingerprint_includes_colspan(fixture_browser: Any) -> 
     second = _browser_payload_html(
         fixture_browser,
         html.replace('class="terrainTxt cursor"', 'class="terrainTxt cursor" colspan="2"', 1),
+    )
+
+    assert first["grid_fingerprint"] != second["grid_fingerprint"]
+
+
+def test_everness_visible_fingerprint_includes_rowspan(fixture_browser: Any) -> None:
+    html = (FIXTURE_ROOT / "booking-available.html").read_text(encoding="utf-8")
+    first = _browser_payload_html(fixture_browser, html)
+    second = _browser_payload_html(
+        fixture_browser,
+        html.replace('class="terrainTxt cursor"', 'class="terrainTxt cursor" rowspan="2"', 1),
     )
 
     assert first["grid_fingerprint"] != second["grid_fingerprint"]
@@ -642,7 +709,11 @@ class _FakeEvernessPage:
             raise AssertionError(f"unexpected page evaluation: {expression!r}")
         if self.programming_error is not None:
             raise self.programming_error("test programming error")
-        if self.date_transition_started and self.transition_error is not None and not self.transition_error_raised:
+        if (
+            self.date_transition_started
+            and self.transition_error is not None
+            and not self.transition_error_raised
+        ):
             self.transition_error_raised = True
             raise self.transition_error
         return self.payload
@@ -689,7 +760,20 @@ class _FakeEvernessPage:
             if self.bootstrap_month_label is not None:
                 return self.bootstrap_month_label
             if self.french_datepicker:
-                return ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")[self.current_date.month - 1] + f" {self.current_date.year}"
+                return (
+                    "janvier",
+                    "février",
+                    "mars",
+                    "avril",
+                    "mai",
+                    "juin",
+                    "juillet",
+                    "août",
+                    "septembre",
+                    "octobre",
+                    "novembre",
+                    "décembre",
+                )[self.current_date.month - 1] + f" {self.current_date.year}"
             return self.current_date.strftime("%B %Y")
         if selector == "#datepicker .day" and index is not None:
             return str(index + 1)
@@ -1041,7 +1125,10 @@ def test_everness_connector_rejects_invalid_jquery_ui_selected_month_or_year(
     requested = date(2026, 9, 22)
     payload = _everness_payload(initial, fingerprint="initial", rows=[])
     connector, page, context = _everness_connector(
-        {initial: [payload], requested: [_everness_payload(requested, fingerprint="requested", rows=[])]},
+        {
+            initial: [payload],
+            requested: [_everness_payload(requested, fingerprint="requested", rows=[])],
+        },
         events,
         initial_date=initial,
         jquery_ui_datepicker=True,
@@ -1354,7 +1441,9 @@ def test_everness_connector_maps_startup_browser_error() -> None:
         "2026-09-22T00:00:00Z",
         "public",
     )
-    connector = EvernessBrowserConnector((source,), browser_factory=lambda: _FailingEvernessBrowser())
+    connector = EvernessBrowserConnector(
+        (source,), browser_factory=lambda: _FailingEvernessBrowser()
+    )
 
     with pytest.raises(EvernessSourceError, match="browser"):
         connector.collect(
@@ -1412,9 +1501,7 @@ def test_everness_runtime_errors_propagate_and_cleanup() -> None:
 def test_everness_connector_maps_normalization_error(monkeypatch: pytest.MonkeyPatch) -> None:
     events: list[str] = []
     dates = {REQUESTED_DATE: [_everness_payload(REQUESTED_DATE, fingerprint="grid-1", rows=[])]}
-    connector, page, context = _everness_connector(
-        dates, events, initial_date=REQUESTED_DATE
-    )
+    connector, page, context = _everness_connector(dates, events, initial_date=REQUESTED_DATE)
 
     def fail_normalization(*_args: object, **_kwargs: object) -> tuple[object, ...]:
         raise PlaytomicSourceError("conflicting duplicate slot hash")

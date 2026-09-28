@@ -25,6 +25,33 @@ from .everness_browser import (
     EvernessBrowserConnectorFactory,
     EvernessBrowserError,
 )
+from .matchpoint import (
+    MATCHPOINT_BOOKING_URLS,
+    MATCHPOINT_LOCATION_IDS,
+    MatchpointSource,
+    MatchpointSourceError,
+    MatchpointStatus,
+    load_matchpoint_sources,
+)
+from .matchpoint_browser import (
+    MatchpointBrowserConnector,
+    MatchpointBrowserConnectorFactory,
+    MatchpointBrowserError,
+)
+from .padelfirst import (
+    PADEL_FIRST_BOOKING_URL,
+    PADEL_FIRST_LOCATION_IDS,
+    PADEL_FIRST_SLOT_MINUTES,
+    PadelFirstSource,
+    PadelFirstSourceError,
+    PadelFirstStatus,
+    load_padelfirst_sources,
+)
+from .padelfirst_browser import (
+    PadelFirstBrowserConnector,
+    PadelFirstBrowserConnectorFactory,
+    PadelFirstBrowserError,
+)
 from .playtomic import (
     JsonFetcher,
     PlaytomicConnector,
@@ -52,12 +79,22 @@ from .plugin import (
     PluginStatus,
     load_plugin_sources,
 )
+from .plugin_browser import (
+    PluginBrowserConnector,
+    PluginBrowserConnectorFactory,
+    PluginBrowserError,
+)
 
 __all__ = [
     "AIRPAD_LOCATION_IDS",
     "AIRPAD_LOCATION_LABELS",
     "EVERNESS_BOOKING_URL",
     "EVERNESS_LOCATION_IDS",
+    "MATCHPOINT_BOOKING_URLS",
+    "MATCHPOINT_LOCATION_IDS",
+    "PADEL_FIRST_BOOKING_URL",
+    "PADEL_FIRST_LOCATION_IDS",
+    "PADEL_FIRST_SLOT_MINUTES",
     "PLUGIN_BOOKING_URLS",
     "PLUGIN_LOCATION_IDS",
     "AirpadBrowserConnector",
@@ -75,11 +112,26 @@ __all__ = [
     "EvernessSourceError",
     "EvernessStatus",
     "JsonFetcher",
+    "MatchpointBrowserConnector",
+    "MatchpointBrowserConnectorFactory",
+    "MatchpointBrowserError",
+    "MatchpointSource",
+    "MatchpointSourceError",
+    "MatchpointStatus",
+    "PadelFirstBrowserConnector",
+    "PadelFirstBrowserConnectorFactory",
+    "PadelFirstBrowserError",
+    "PadelFirstSource",
+    "PadelFirstSourceError",
+    "PadelFirstStatus",
     "PlaytomicBrowserConnector",
     "PlaytomicBrowserError",
     "PlaytomicConnector",
     "PlaytomicSource",
     "PlaytomicSourceError",
+    "PluginBrowserConnector",
+    "PluginBrowserConnectorFactory",
+    "PluginBrowserError",
     "PluginSource",
     "PluginSourceError",
     "PluginStatus",
@@ -87,6 +139,8 @@ __all__ = [
     "fetch_public_json",
     "load_airpad_sources",
     "load_everness_sources",
+    "load_matchpoint_sources",
+    "load_padelfirst_sources",
     "load_playtomic_sources",
     "load_plugin_sources",
     "parse_browser_observations",

@@ -81,6 +81,17 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     if (/^(unknown|partially booked|partially reserved|check availability|\?|notallowed)$/.test(state)) return 'unknown';
     return state ? 'unrecognized' : '';
   };
+  const visualStateOf = (cell, value) => {
+    const classNames = cell.className.toLocaleLowerCase();
+    if (/\b(?:notallowed|tempnotallowed)\b/.test(classNames)) return 'unknown';
+    if (/\bcursor\b/.test(classNames)) return 'available';
+    if (!/\b(?:time_extra|time_30)\b/.test(classNames)) return '';
+    const background = getComputedStyle(cell).backgroundColor.toLocaleLowerCase();
+    const transparent = background === 'transparent' || /rgba\(0,\s*0,\s*0,\s*0\)/.test(background);
+    if (!value && transparent) return 'available';
+    if (/^\d{2}:\d{2}$/.test(value) && !transparent) return 'unavailable';
+    return '';
+  };
   const addCourt = name => {
     if (name && !/^(sa|di|lu|ma|me|je|ve)\s+\d+$/i.test(name) && !courts.includes(name)) courts.push(name);
   };
@@ -92,8 +103,10 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     if (!court || !start) continue;
     const stateText = (cell.innerText || '').trim();
     const classNames = cell.className.toLocaleLowerCase();
-    let state = stateOf(stateText);
-    if (/notallowed/.test(classNames)) state = 'unknown';
+    const textState = stateOf(stateText);
+    const visualText = !stateText || /^\d{2}:\d{2}$/.test(stateText)
+      ? visualStateOf(cell, stateText) : '';
+    const state = visualText || textState;
     const step = Number((classNames.match(/time_(\d+)/) || [])[1]);
     const rowspan = Number(cell.getAttribute('rowspan') || 1);
     let endMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3)) + step * rowspan;
@@ -155,6 +168,34 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     /aucun créneau|no availability|no available slots/i.test(body?.innerText || '');
   return {view: dateLabel ? 'booking' : 'unknown', date: selectedDate, activity, courts, slots,
     loading, authentication_visible, empty_grid};
+}
+"""
+
+_PLUGIN_ACTIVITY_CONTROL_SCRIPT = r"""
+() => {
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    for (let current = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 ||
+          current.getAttribute('aria-hidden') === 'true') return false;
+    }
+    return true;
+  };
+  const controls = Array.from(document.querySelectorAll('select'));
+  const matches = controls.flatMap((control, index) => {
+    if (!visible(control)) return [];
+    const option = Array.from(control.options).find(candidate => {
+      const label = (candidate.innerText || '').trim().replace(/\s+/g, ' ');
+      return label.split(/\s+-\s+/)[0].trim().toLocaleLowerCase() === 'padel';
+    });
+    return option ? [{index, label: option.innerText.trim(), selected: option.selected}] : [];
+  });
+  if (matches.length !== 1) {
+    return {status: matches.length ? 'ambiguous' : 'missing', index: -1, label: '', selected: false};
+  }
+  return {status: 'ok', ...matches[0]};
 }
 """
 
@@ -234,6 +275,10 @@ class _PluginLocator(Protocol):
 
     def click(self) -> None: ...
 
+    def nth(self, index: int) -> "_PluginLocator": ...
+
+    def select_option(self, *, label: str) -> object: ...
+
 
 class _PluginPage(Protocol):
     def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
@@ -279,6 +324,61 @@ def _decline_optional_cookies(page: _PluginPage) -> None:
     _visible_locator(page, selector).click()
 
 
+def _select_plugin_activity(page: _PluginPage, timeout_ms: int) -> None:
+    previous_diary: tuple[object, object, object, object] | None = None
+    for _ in range(max(1, timeout_ms // 100)):
+        payload = _mapping(
+            page.evaluate(_PLUGIN_ACTIVITY_CONTROL_SCRIPT), "visible Plugin activity"
+        )
+        status = payload.get("status")
+        if status == "ok":
+            raw_index = payload.get("index")
+            label = payload.get("label")
+            selected = payload.get("selected")
+            if (
+                type(raw_index) is not int
+                or raw_index < 0
+                or not isinstance(label, str)
+                or not label.strip()
+                or type(selected) is not bool
+            ):
+                raise PluginBrowserError("visible Plugin activity control has an invalid response")
+            if selected:
+                return
+            diary = _mapping(page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT), "visible DOM")
+            current_diary = (
+                diary.get("view"),
+                diary.get("date"),
+                diary.get("courts"),
+                diary.get("slots"),
+            )
+            if (
+                diary.get("view") == "booking"
+                and isinstance(diary.get("date"), str)
+                and isinstance(diary.get("courts"), list)
+                and diary.get("courts")
+                and isinstance(diary.get("slots"), list)
+                and (diary.get("slots") or diary.get("empty_grid") is True)
+            ):
+                if current_diary == previous_diary:
+                    locator = page.locator("select").nth(raw_index)
+                    if locator.count() != 1 or not locator.is_visible():
+                        raise PluginBrowserError(
+                            "visible Plugin Padel activity control was not found"
+                        )
+                    locator.select_option(label=label)
+                    return
+                previous_diary = current_diary
+            else:
+                previous_diary = None
+        if status == "ambiguous":
+            raise PluginBrowserError("visible Plugin Padel activity control is ambiguous")
+        if status not in {"missing", "ok"}:
+            raise PluginBrowserError("visible Plugin activity control has an invalid response")
+        page.wait_for_timeout(100)
+    raise PluginBrowserError("visible Plugin Padel activity control was not found")
+
+
 def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
     courts, slots = dom.get("courts"), dom.get("slots")
     if not isinstance(courts, list) or not courts or not isinstance(slots, list):
@@ -304,16 +404,39 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
     )
 
 
-def _wait_for_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: int) -> object:
+def _wait_for_plugin_date(
+    page: _PluginPage,
+    requested_date: date,
+    timeout_ms: int,
+    *,
+    expected_activity: str = "Padel",
+) -> object:
     previous_ready_dom: dict[str, object] | None = None
+    wrong_activity_observed = False
     for _ in range(max(1, timeout_ms // 100)):
-        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        try:
+            payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        except Exception as error:
+            if not _is_documented_browser_error(error):
+                raise
+            previous_ready_dom = None
+            page.wait_for_timeout(100)
+            continue
         dom = _mapping(payload, "visible DOM")
         if dom.get("authentication_visible") is True:
             return payload
         if (
             dom.get("view") == "booking"
             and dom.get("date") == requested_date.isoformat()
+            and isinstance(dom.get("activity"), str)
+            and dom.get("activity")
+            and dom.get("activity") != expected_activity
+        ):
+            wrong_activity_observed = True
+        if (
+            dom.get("view") == "booking"
+            and dom.get("date") == requested_date.isoformat()
+            and dom.get("activity") == expected_activity
             and dom.get("loading") is False
             and _plugin_grid_ready(dom)
         ):
@@ -324,6 +447,8 @@ def _wait_for_plugin_date(page: _PluginPage, requested_date: date, timeout_ms: i
         else:
             previous_ready_dom = None
         page.wait_for_timeout(100)
+    if wrong_activity_observed:
+        raise PluginBrowserError("selected activity does not match expected activity")
     raise PluginBrowserError("timed out waiting for the requested Plugin date")
 
 
@@ -417,19 +542,28 @@ class PluginBrowserConnector:
                 try:
                     page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
                     _decline_optional_cookies(page)
+                    _select_plugin_activity(page, self._timeout_ms)
                     current_date = window_start
-                    payload = _wait_for_plugin_date(page, current_date, self._timeout_ms)
+                    payload = _wait_for_plugin_date(
+                        page, current_date, self._timeout_ms, expected_activity="Padel"
+                    )
                     while current_date < window_end:
                         observations.extend(parse_plugin_dom(payload, current_date))
                         current_date += timedelta(days=1)
                         if current_date < window_end:
                             selector = page.evaluate(_PLUGIN_NEXT_CONTROL_SCRIPT)
                             if selector == "!ambiguous":
-                                raise PluginBrowserError("visible Plugin next-day control is ambiguous")
+                                raise PluginBrowserError(
+                                    "visible Plugin next-day control is ambiguous"
+                                )
                             if not isinstance(selector, str) or not selector:
-                                raise PluginBrowserError("visible Plugin next-day control was not found")
+                                raise PluginBrowserError(
+                                    "visible Plugin next-day control was not found"
+                                )
                             _visible_locator(page, selector).click()
-                            payload = _wait_for_plugin_date(page, current_date, self._timeout_ms)
+                            payload = _wait_for_plugin_date(
+                                page, current_date, self._timeout_ms, expected_activity="Padel"
+                            )
                 finally:
                     page.close()
             finally:
@@ -554,9 +688,10 @@ def parse_plugin_dom(
             raise PluginBrowserError("slot references an unlisted court")
         start_text = _text(slot["start"], "time")
         end_text = _text(slot["end"], "time")
-        if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", start_text) is None or re.fullmatch(
-            r"(?:[01]\d|2[0-3]):[0-5]\d", end_text
-        ) is None:
+        if (
+            re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", start_text) is None
+            or re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", end_text) is None
+        ):
             raise PluginBrowserError("slot time must use valid HH:MM format")
         start_time, end_time = time.fromisoformat(start_text), time.fromisoformat(end_text)
         start_local = _zurich_wall_time(requested_date, start_time)

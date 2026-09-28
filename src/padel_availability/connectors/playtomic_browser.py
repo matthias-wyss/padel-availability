@@ -6,7 +6,8 @@ from typing import Any, Literal, Protocol, Self, cast
 from zoneinfo import ZoneInfo
 
 from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot, local_to_utc
-from ..models import LocationRecord, ModelError, _text  # pyright: ignore[reportPrivateUsage]
+from ..models import LocationRecord, ModelError
+from ..models import validate_text as _text
 from .playtomic import (  # pyright: ignore[reportPrivateUsage]
     PlaytomicSource,
     PlaytomicSourceError,

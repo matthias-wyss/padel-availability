@@ -1,7 +1,7 @@
 import sqlite3
+from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Sequence
 
 from .availability import (
     AvailabilityResult,
@@ -187,7 +187,9 @@ def insert_candidates(
         )
 
 
-def _insert_evidence(connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence) -> None:
+def _insert_evidence(
+    connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence
+) -> None:
     connection.execute(
         """
         INSERT INTO sources (url, source_type, title, checked_at) VALUES (?, ?, ?, ?)
@@ -282,10 +284,18 @@ def upsert_location(
                 location.notes,
             ),
         )
-        connection.execute("DELETE FROM court_groups WHERE location_id = ?", (location.location_id,))
-        connection.execute("DELETE FROM location_aliases WHERE location_id = ?", (location.location_id,))
-        connection.execute("DELETE FROM location_evidence WHERE location_id = ?", (location.location_id,))
-        connection.execute("DELETE FROM location_candidates WHERE location_id = ?", (location.location_id,))
+        connection.execute(
+            "DELETE FROM court_groups WHERE location_id = ?", (location.location_id,)
+        )
+        connection.execute(
+            "DELETE FROM location_aliases WHERE location_id = ?", (location.location_id,)
+        )
+        connection.execute(
+            "DELETE FROM location_evidence WHERE location_id = ?", (location.location_id,)
+        )
+        connection.execute(
+            "DELETE FROM location_candidates WHERE location_id = ?", (location.location_id,)
+        )
         connection.execute(
             "UPDATE candidate_entries SET matched_location_id = NULL WHERE matched_location_id = ?",
             (location.location_id,),
@@ -333,7 +343,9 @@ def upsert_location(
             _insert_evidence(connection, location.location_id, evidence)
 
 
-def insert_evidence(connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence) -> None:
+def insert_evidence(
+    connection: sqlite3.Connection, location_id: str, evidence: SourceEvidence
+) -> None:
     with connection:
         _insert_evidence(connection, location_id, evidence)
 
@@ -624,5 +636,12 @@ def create_verification_run(
                 error_count = excluded.error_count,
                 summary = excluded.summary
             """,
-            (run.run_id, run.started_at, run.ended_at, run.candidate_count, run.error_count, run.summary),
+            (
+                run.run_id,
+                run.started_at,
+                run.ended_at,
+                run.candidate_count,
+                run.error_count,
+                run.summary,
+            ),
         )

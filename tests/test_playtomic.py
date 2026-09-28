@@ -13,7 +13,6 @@ from padel_availability.connectors.playtomic import (
 )
 from padel_availability.models import LocationRecord, ModelError
 
-
 ROOT = Path(__file__).parents[1]
 FIXTURE_NAMES = (
     "padel-station",

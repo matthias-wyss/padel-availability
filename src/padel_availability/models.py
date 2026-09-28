@@ -1,7 +1,8 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import isfinite
-from typing import Literal, Mapping, cast
+from typing import Literal, cast
 from urllib.parse import urlparse
 
 
@@ -48,13 +49,15 @@ def _url(value: object, field: str) -> str:
     value = _text(value, field)
     try:
         parsed = urlparse(value)
-        parsed.port
+        port = parsed.port
     except ValueError as error:
         raise ModelError(f"{field} must be an absolute HTTP(S) URL") from error
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.netloc
         or any(char.isspace() for char in value)
+        or port is not None
+        and parsed.hostname is None
     ):
         raise ModelError(f"{field} must be an absolute HTTP(S) URL")
     return value
@@ -69,7 +72,7 @@ def _optional_url(value: object, field: str) -> str | None:
 def _strings(values: object, field: str, *, allow_list: bool = False) -> tuple[str, ...]:
     if not isinstance(values, tuple) and not (allow_list and isinstance(values, list)):
         raise ModelError(f"{field} must be a tuple")
-    result = tuple(values)
+    result = tuple(cast(tuple[object, ...] | list[object], values))
     if not all(isinstance(value, str) and value.strip() for value in result):
         raise ModelError(f"{field} must contain non-empty strings")
     result = cast(tuple[str, ...], result)
@@ -83,12 +86,20 @@ def _utc_timestamp(value: object, field: str) -> str:
     if not value.endswith("Z"):
         raise ModelError(f"{field} must be an ISO-8601 UTC timestamp ending in Z")
     try:
-        timestamp = datetime.fromisoformat(value[:-1] + "+00:00")
+        timestamp = datetime.fromisoformat(value)
     except ValueError as error:
         raise ModelError(f"{field} must be an ISO-8601 UTC timestamp ending in Z") from error
     if timestamp.tzinfo is None or timestamp.utcoffset() != timedelta(0):
         raise ModelError(f"{field} must be an ISO-8601 UTC timestamp ending in Z")
     return value
+
+
+# Public entry points for validators shared with connector modules.
+validate_text = _text
+validate_optional_text = _optional_text
+validate_literal = _literal
+validate_url = _url
+validate_utc_timestamp = _utc_timestamp
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +129,7 @@ class CourtGroup:
 
     def __post_init__(self) -> None:
         _text(self.label, "label")
-        if not isinstance(self.count, int) or self.count <= 0:
+        if not isinstance(cast(object, self.count), int) or self.count <= 0:
             raise ModelError("count must be a positive integer")
         _optional_text(self.format, "format")
         _literal(self.cover_status, "cover_status", _COVER_STATUSES)
@@ -232,13 +243,13 @@ class LocationRecord:
         ):
             _literal(getattr(self, field), field, _TRI_STATES)
         _literal(self.verification_status, "verification_status", _VERIFICATION_STATUSES)
-        if not isinstance(self.court_groups, tuple) or not all(
-            isinstance(group, CourtGroup) for group in self.court_groups
+        if not isinstance(cast(object, self.court_groups), tuple) or not all(
+            isinstance(group, CourtGroup) for group in cast(tuple[object, ...], self.court_groups)
         ):
             raise ModelError("court_groups must contain CourtGroup values")
         _strings(self.aliases, "aliases")
-        if not isinstance(self.evidence, tuple) or not all(
-            isinstance(item, SourceEvidence) for item in self.evidence
+        if not isinstance(cast(object, self.evidence), tuple) or not all(
+            isinstance(item, SourceEvidence) for item in cast(tuple[object, ...], self.evidence)
         ):
             raise ModelError("evidence must contain SourceEvidence values")
         _text(self.notes, "notes", allow_empty=True)
@@ -321,6 +332,8 @@ class LocationRecord:
             evidence = mapping["evidence"]
             if not isinstance(groups, (list, tuple)) or not isinstance(evidence, (list, tuple)):
                 raise ModelError("court_groups and evidence must be lists")
+            raw_groups = cast(Sequence[object], groups)
+            raw_evidence = cast(Sequence[object], evidence)
             return cls(
                 location_id=cast(str, mapping["location_id"]),
                 canonical_name=cast(str, mapping["canonical_name"]),
@@ -334,11 +347,12 @@ class LocationRecord:
                 booking_account_required=cast(TriState, mapping["booking_account_required"]),
                 verification_status=cast(VerificationStatus, mapping["verification_status"]),
                 court_groups=tuple(
-                    CourtGroup.from_mapping(cast(Mapping[str, object], item)) for item in groups
+                    CourtGroup.from_mapping(cast(Mapping[str, object], item)) for item in raw_groups
                 ),
                 aliases=_strings(mapping["aliases"], "aliases", allow_list=True),
                 evidence=tuple(
-                    SourceEvidence.from_mapping(cast(Mapping[str, object], item)) for item in evidence
+                    SourceEvidence.from_mapping(cast(Mapping[str, object], item))
+                    for item in raw_evidence
                 ),
                 notes=cast(str, mapping["notes"]),
                 brand=cast(str | None, mapping.get("brand")),
