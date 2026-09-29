@@ -45,6 +45,14 @@ label when present, start/end time, duration, snapshot freshness, and a
 On desktop, filters stay in a sidebar and results occupy the main column. On
 mobile, filters collapse above the results.
 
+When a time range is entered, match a slot by its Europe/Zurich start time in
+the half-open interval `[start, end)`; display its actual end and duration even
+if the slot ends after the filter's end time.
+
+When a time range is entered, include slots whose Europe/Zurich start time is
+inside the half-open range `[start, end)`; show the actual slot end and duration
+even if they extend past the filter end.
+
 ## Data semantics
 
 Reuse the existing `AvailabilitySnapshot` and `AvailabilitySlot` values without
