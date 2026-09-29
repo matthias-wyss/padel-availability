@@ -65,7 +65,7 @@
 - `GET /healthz` returns `200` with a minimal health response.
 - `GET /api/availability` returns JSON containing `generated_at` and a `locations` object keyed by `location_id`. Each value contains `canonical_name`, `municipality`, `overall_cover_status`, `booking_url`, `snapshot_status`, `window_start`, `window_end`, `last_success_at`, and `slots` (`court_label`, `starts_at`, `ends_at`, `status`).
 
-- [ ] **Step 1: Declare the web dependency group**
+- [x] **Step 1: Declare the web dependency group**
 
 Add a `web` dependency group with `Flask>=3.1,<4` and `waitress>=3,<4`, then
 update `uv.lock` with `uv lock`. Keep Playwright in the existing `browser` group.
@@ -73,7 +73,7 @@ If `uv` is missing, install it only in the ignored `.venv` with
 `.venv/bin/python -m pip install uv`; then run
 `.venv/bin/uv sync --dev --group browser --group web`.
 
-- [ ] **Step 2: Write failing snapshot API tests**
+- [x] **Step 2: Write failing snapshot API tests**
 
 Create a temporary initialized catalog with a configured location having one
 available slot, a stale location whose latest failed run follows an earlier
@@ -96,7 +96,7 @@ appear, the stale window comes from the last successful run (not the latest
 failed run), and GET does not insert an availability run. The initial failure is
 an assertion, not a test-collection error.
 
-- [ ] **Step 3: Run the API tests and verify the expected failure**
+- [x] **Step 3: Run the API tests and verify the expected failure**
 
 Run:
 
@@ -107,7 +107,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web.py
 Expected: the API test fails its module-presence assertion because the web app
 is not implemented yet.
 
-- [ ] **Step 4: Implement the read-only snapshot endpoint**
+- [x] **Step 4: Implement the read-only snapshot endpoint**
 
 Add the Flask app factory and `GET /api/availability`. Load the 23 configured
 source IDs from the six checked-in manifests, location metadata from the
@@ -116,7 +116,7 @@ snapshot, query its last successful `AvailabilityRun` so `window_start` and
 `window_end` match the returned slots. Return `snapshot_status="no_data"` when
 no run exists. Do not copy raw exception details or expose database paths.
 
-- [ ] **Step 5: Verify snapshot API tests and typing**
+- [x] **Step 5: Verify snapshot API tests and typing**
 
 Run:
 
@@ -143,7 +143,7 @@ runs.
 - `run_all_sources(connection: sqlite3.Connection, data_directory: Path, now: datetime, on_outcome: Callable[[CollectionOutcome], None]) -> tuple[CollectionOutcome, ...]` calls the six existing `collect_*` functions sequentially.
 - Add `padel-availability-web = "padel_availability.web:main"` and `padel-availability-worker = "padel_availability.refresh:main"` to `[project.scripts]`; update `uv.lock`.
 
-- [ ] **Step 1: Write failing refresh state and cooldown tests**
+- [x] **Step 1: Write failing refresh state and cooldown tests**
 
 At the start of each test, assert
 `importlib.util.find_spec("padel_availability.refresh") is not None`, then import
@@ -161,7 +161,7 @@ manifests. Assert the five non-Plugin collector families receive
 `collonge-bellerive`, `cologny`, `csu-champel`, `drizia-miremont`, `fraisiers`,
 and `mies-tannay` at 7 days; `crans-vd` at 3 days; and `gland` at 14 days.
 
-- [ ] **Step 2: Run the refresh tests and verify the expected failure**
+- [x] **Step 2: Run the refresh tests and verify the expected failure**
 
 Run:
 
@@ -172,7 +172,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_refresh.py
 Expected: the refresh tests fail their module-presence assertion because the
 refresh-state table/coordinator are not implemented yet.
 
-- [ ] **Step 3: Add persisted refresh state and transaction helpers**
+- [x] **Step 3: Add persisted refresh state and transaction helpers**
 
 Extend `database.initialize` with `availability_refresh_jobs` and a singleton
 `availability_refresh_control`. Store trigger type, job status (`queued`,
@@ -182,7 +182,7 @@ progress, bounded error, and the shared `last_started_at`. Use an SQLite
 five-minute global start cooldown. Expose helpers to enqueue, claim, update, and
 read status; add database tests for cooldown and one-active-job behavior.
 
-- [ ] **Step 4: Implement the all-source runner and source horizons**
+- [x] **Step 4: Implement the all-source runner and source horizons**
 
 Call `collect_playtomic`, `collect_airpad`, `collect_everness`,
 `collect_padelfirst`, `collect_matchpoint`, and `collect_plugin` with the checked
@@ -194,7 +194,7 @@ and `mies-tannay`; three days for `crans-vd`; fourteen days for `gland`. Update
 job progress after each `CollectionOutcome`. Preserve previous successful data
 as stale on errors; never fabricate slots beyond a source's selectable window.
 
-- [ ] **Step 5: Implement the 07:00–23:00 Europe/Zurich worker schedule**
+- [x] **Step 5: Implement the 07:00–23:00 Europe/Zurich worker schedule**
 
 Add one single-replica worker process. Check due half-hour ticks using
 `ZoneInfo("Europe/Zurich")`; queue a scheduled full refresh only when the global
@@ -202,7 +202,7 @@ cooldown and single-worker state permit it. Skip a blocked tick instead of
 backfilling missed runs. Provide a `padel-availability-worker` entry point and a
 stop event so container shutdown stops the scheduler loop cleanly.
 
-- [ ] **Step 6: Add manual refresh and status routes**
+- [x] **Step 6: Add manual refresh and status routes**
 
 Add `POST /api/refresh` to request only the fixed all-source job; return 202 when
 queued, 409 with current status when a job is active, and 429 with `Retry-After`
@@ -213,7 +213,7 @@ commands, or user-supplied paths from the request.
 The web process only enqueues refresh jobs; the worker process claims and runs
 them. Page GET routes only read state and never start browser activity.
 
-- [ ] **Step 7: Run refresh/API tests**
+- [x] **Step 7: Run refresh/API tests**
 
 Run:
 
@@ -238,7 +238,7 @@ jobs share the persisted lock/cooldown.
 half-open `[start, end)` range. Keep the slot's full end time and duration in
 the result even if it extends beyond the requested end time.
 
-- [ ] **Step 1: Add failing browser tests for the evening search**
+- [x] **Step 1: Add failing browser tests for the evening search**
 
 Create a local HTML/JSON fixture with two configured clubs (one indoor, one
 outdoor), one fresh available slot, an unknown slot, a stale slot, and one
@@ -249,7 +249,7 @@ reload and assert checkbox selections restore from local storage. Also assert a
 slot starting at 21:30 is included in the `[18:00, 22:00)` range with its full
 end time shown.
 
-- [ ] **Step 2: Run UI tests to confirm they fail**
+- [x] **Step 2: Run UI tests to confirm they fail**
 
 Run:
 
@@ -260,7 +260,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web_ui.py
 Expected: the page/UI modules do not exist and the tests fail on missing UI
 behavior.
 
-- [ ] **Step 3: Implement the approved accessible UI**
+- [x] **Step 3: Implement the approved accessible UI**
 
 Render the single-page Jinja view with the refresh header, 14-day horizon,
 optional time controls, **Ce soir** preset, indoor/outdoor/other cover filters,
@@ -276,14 +276,14 @@ Use semantic labels/checkboxes/time inputs, visible keyboard focus, 44px mobile
 targets, responsive filter drawer on small screens, and textual status labels in
 addition to color. Keep list as the only map alternative in v1.
 
-- [ ] **Step 4: Connect refresh status and action**
+- [x] **Step 4: Connect refresh status and action**
 
 Use `POST /api/refresh` and poll `GET /api/refresh/status` while queued/running.
 Disable the button during an active job or global cooldown, show progress and the
 next permitted refresh time, and keep the last successful snapshot visible until
 the new run succeeds.
 
-- [ ] **Step 5: Verify UI tests and quality checks**
+- [x] **Step 5: Verify UI tests and quality checks**
 
 Run:
 
@@ -301,7 +301,7 @@ is inaccessible.
 **Files:**
 - Create: `deploy/ct103/bootstrap-catalog.sh`
 
-- [ ] **Step 1: Add the safe one-time bootstrap script**
+- [x] **Step 1: Add the safe one-time bootstrap script**
 
 Create a shell script that requires a database path and refuses to run if that
 file already exists. For a new path, run the existing `init-db`,
@@ -310,7 +310,7 @@ file already exists. For a new path, run the existing `init-db`,
 commands with a dated verification run ID. It must never delete or overwrite an
 existing SQLite file.
 
-- [ ] **Step 2: Verify local app and bootstrap commands**
+- [x] **Step 2: Verify local app and bootstrap commands**
 
 Run the bootstrap against a new temporary SQLite path, verify that a second run
 refuses the existing path without changing it, start the web entry point on
@@ -323,7 +323,7 @@ tests. Confirm the CLI can still run independently without starting the web app.
 - Modify: `README.md`
 - Create: `AGENTS.md`
 
-- [ ] **Step 1: Rewrite README as the user/operator guide**
+- [x] **Step 1: Rewrite README as the user/operator guide**
 
 Document local setup and quality commands, catalog bootstrap, the public web
 URL, club/time/coverage filters, local checkbox persistence, booking links,
@@ -332,7 +332,7 @@ five-minute global refresh limit, manual collector CLI commands, CT103 pull/buil
 deployment, and persistent DB location. State clearly that the app never books
 or collects participant data.
 
-- [ ] **Step 2: Write concise project AGENTS.md rules**
+- [x] **Step 2: Write concise project AGENTS.md rules**
 
 Document Python 3.12 and quality commands; keep visible-public-DOM-only, no
 login/private API/booking/player data; preserve `available`/`unknown`/`stale` and
@@ -341,7 +341,7 @@ worktree for isolated feature work; and require reading/updating
 `workspace/infra/` for real CT103/CT100 changes. State that project instructions
 supplement, never override, workspace/cluster AGENTS.md files.
 
-- [ ] **Step 3: Check README/AGENTS commands against actual entry points**
+- [x] **Step 3: Check README/AGENTS commands against actual entry points**
 
 Run each documented `--help` command and use `git check-ignore var/catalog.sqlite3`
 to confirm the local database is ignored.

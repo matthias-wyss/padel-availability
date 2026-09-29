@@ -2,7 +2,7 @@
 
 ## Status
 
-Design approved; README and AGENTS.md added to scope; written spec review pending, 2026-09-29.
+Design approved; README and AGENTS.md added to scope; implementation underway, 2026-09-29.
 
 ## Goal
 

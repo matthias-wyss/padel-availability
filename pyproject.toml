@@ -11,10 +11,16 @@ dependencies = []
 
 [project.scripts]
 padel-availability = "padel_availability.cli:main"
+padel-availability-web = "padel_availability.web:main"
+padel-availability-worker = "padel_availability.refresh:main"
 
 [dependency-groups]
 browser = [
     "playwright>=1.45,<2",
+]
+web = [
+    "flask>=3.1,<4",
+    "waitress>=3,<4",
 ]
 dev = [
     "pyright>=1.1,<2",

@@ -1,0 +1,49 @@
+name: padel-availability
+
+services:
+  web:
+    image: padel-availability:local
+    build:
+      context: ../..
+      dockerfile: deploy/ct103/Dockerfile
+    command: ["padel-availability-web"]
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Zurich
+    ports:
+      - "8082:8082"
+    volumes:
+      - type: bind
+        source: /var/lib/padel-availability
+        target: /data
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/healthz', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  worker:
+    image: padel-availability:local
+    build:
+      context: ../..
+      dockerfile: deploy/ct103/Dockerfile
+    command: ["padel-availability-worker"]
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 120s
+    environment:
+      TZ: Europe/Zurich
+    volumes:
+      - type: bind
+        source: /var/lib/padel-availability
+        target: /data
+        bind:
+          create_host_path: false

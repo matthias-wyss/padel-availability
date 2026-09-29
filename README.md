@@ -1,33 +1,33 @@
 # Padel Availability
 
-Verified padel club catalog for the Geneva to Lausanne region.
-
-This first slice is a read-only inventory catalog with manual Playtomic
-availability collection, not an automatic booking service. It does not make
-reservations or payments.
+Find public padel availability around Geneva and Lausanne: **https://padel.matthiaswyss.ch**.
+The app reads collected snapshots from 23 configured club sources and links to
+each club's public booking page. It never books, authenticates, pays, or collects
+player data.
 
 ## Development
 
 Sync the development tools and run the offline test suite:
 
 ```bash
-uv sync --dev
-uv run ruff format --check .
+uv sync --dev --group browser --group web
+uv run ruff format --check src tests
 uv run ruff check .
 uv run pyright
-uv run pytest
+PYTHONPATH=src uv run pytest -q
+uv run playwright install chromium
 ```
 
-The equivalent tool commands are also useful when `uv` is unavailable:
+The Python tools can also be run directly from `.venv/bin` when `uv` is unavailable:
 
 ```bash
-ruff format --check .
-ruff check .
-pyright
-pytest
+.venv/bin/ruff format --check src tests
+.venv/bin/ruff check .
+.venv/bin/pyright
+PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-## Build And Report
+## Catalog And Report
 
 The catalog is rebuilt only from the tracked candidate and verified JSON. The
 local SQLite file is disposable and ignored by Git; the Markdown report is the
@@ -54,6 +54,98 @@ rg -n '^## Missing or unknown facts|^### Unresolved candidates|Inconnu|not_confi
 ```
 
 Use a `.json` output path for a machine-readable report.
+
+## Public Web App
+
+The app defaults to today through the next 14 days. Set a date range, an
+optional start/end time range, indoor/outdoor coverage, and clubs. With no time
+range, it shows all times; **Ce soir** selects today from 18:00 to 22:00. The
+club checklist starts with all 23 configured locations selected and stores later
+choices only in that browser's local storage.
+
+Results are grouped by date in `Europe/Zurich`. A **Réserver** link opens the
+club's own booking page in a new tab. Availability meaning stays explicit:
+
+- **Disponible**: confirmed available in the latest successful snapshot.
+- **À vérifier**: the source returned an unknown slot state; it is not counted
+  as free.
+- **Données anciennes**: the last successful snapshot is retained after a
+  collection error and may no longer be current.
+- **Pas encore collecté** / **Données indisponibles**: no snapshot or no usable
+  successful result exists.
+- **Hors période publiée**: the selected dates exceed that source's published
+  collection window. A source's shorter window is never extended by guessing.
+
+The **Actualiser** button requests a refresh of all 23 configured sources. It
+does not book a court. Manual and scheduled collection share one active worker
+and a global five-minute cooldown. The worker refreshes every 30 minutes from
+07:00 through 23:00 `Europe/Zurich`; a blocked scheduled tick is skipped.
+Opening or filtering the page does not contact booking sites. Non-Plugin
+collectors use a 14-day horizon. Plugin's published windows are seven days for
+Collonge-Bellerive, Cologny, CSU Champel, Drizia-Miremont, Fraisiers, and
+Mies-Tannay; three days for Crans; and 14 days for Gland.
+
+### Run locally
+
+Bootstrap a new local catalog once (the script refuses an existing database):
+
+```bash
+uv run bash deploy/ct103/bootstrap-catalog.sh "$PWD/var/catalog.sqlite3"
+```
+
+Run the web app and worker in separate terminals:
+
+```bash
+PADEL_AVAILABILITY_DB="$PWD/var/catalog.sqlite3" \
+PADEL_AVAILABILITY_DATA="$PWD/data" \
+  uv run padel-availability-web
+```
+
+```bash
+PADEL_AVAILABILITY_DB="$PWD/var/catalog.sqlite3" \
+PADEL_AVAILABILITY_DATA="$PWD/data" \
+  uv run padel-availability-worker
+```
+
+### Deploy on CT103
+
+The public GitHub repository is pulled into `/opt/padel-availability`. The web
+container listens on CT103 port `8082`; the worker has no published port. Both
+mount `/var/lib/padel-availability` at `/data`; the database at
+`/data/catalog.sqlite3` stays outside the checkout across pulls and rebuilds.
+
+For first setup, clone the public repository, create the persistent directory,
+run the catalog bootstrap, then build and start the Compose services:
+
+```bash
+git clone https://github.com/matthias-wyss/padel-availability.git /opt/padel-availability
+mkdir -p /var/lib/padel-availability
+cd /opt/padel-availability
+docker compose -f deploy/ct103/compose.yaml build web
+./deploy/ct103/bootstrap-catalog.sh /var/lib/padel-availability/catalog.sqlite3
+docker compose -f deploy/ct103/compose.yaml up -d --build
+```
+
+Trigger and verify the initial all-source collection on CT103 before enabling
+the public NPM host:
+
+```bash
+curl --fail --request POST http://127.0.0.1:8082/api/refresh
+curl --fail http://127.0.0.1:8082/api/refresh/status
+```
+
+For updates, pull the fast-forwarded default branch and rebuild; do not replace
+the persistent data path:
+
+```bash
+cd /opt/padel-availability
+git pull --ff-only
+docker compose -f deploy/ct103/compose.yaml up -d --build
+```
+
+The public host `padel.matthiaswyss.ch` is routed by NPM on CT100 to CT103:8082.
+Real server changes must also be recorded in the matching
+`workspace/infra/` documentation.
 
 ## Manual Availability Collection
 
@@ -90,9 +182,9 @@ uv run padel-availability collect-everness \
   --days 14
 ```
 
-This command reads the public Plugin.ch grid and is sequential, read-only, and
-manual. Browser state is ephemeral and is not saved between runs. It never logs
-in or reserves. Other portals without public availability remain unsupported;
+This command reads the public Everness availability grid and is sequential,
+read-only, and manual. Browser state is ephemeral and is not saved between runs.
+It never logs in or reserves. Other portals without public availability remain unsupported;
 they are not bypassed. Each outcome is persisted locally, and an `error` or
 `unavailable` outcome keeps the previous successful snapshot as stale rather
 than replacing its slots.
@@ -146,9 +238,9 @@ retains consent state between runs. Open matches count as occupied courts. The
 Evaux and Jonction sources use the public center selectors `id=8` and `id=9`;
 `club=Evaux` and `club=Jonction` are not valid selectors. This activation covers
 exactly the four entries in `data/matchpoint_sources.json`; the other
-unconfigured booking platforms are deferred. Each outcome is persisted locally, and an `error` or
-`unavailable` outcome keeps the previous successful snapshot as stale rather
-than replacing its slots.
+unconfigured booking platforms are deferred. Each outcome is persisted locally,
+and an `error` or `unavailable` outcome keeps the previous successful snapshot
+as stale rather than replacing its slots.
 
 Collect the four AIRPAD availability snapshots manually:
 

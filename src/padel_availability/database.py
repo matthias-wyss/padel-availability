@@ -151,6 +151,30 @@ def initialize(connection: sqlite3.Connection) -> None:
             error_count INTEGER NOT NULL CHECK (error_count >= 0),
             summary TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS availability_refresh_jobs (
+            job_id TEXT PRIMARY KEY,
+            trigger TEXT NOT NULL CHECK (trigger IN ('manual', 'scheduled')),
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'partial', 'error')),
+            requested_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            completed_locations INTEGER NOT NULL DEFAULT 0 CHECK (completed_locations >= 0),
+            total_locations INTEGER NOT NULL CHECK (total_locations >= 0),
+            error TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS availability_refresh_jobs_recent
+            ON availability_refresh_jobs(requested_at DESC, job_id DESC);
+
+        CREATE TABLE IF NOT EXISTS availability_refresh_control (
+            singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+            last_started_at TEXT,
+            last_scheduled_tick TEXT
+        );
+
+        INSERT OR IGNORE INTO availability_refresh_control (singleton_id)
+        VALUES (1);
         """
     )
     connection.commit()
@@ -533,6 +557,21 @@ def list_availability_runs(
             (location_id,),
         ).fetchall()
     return tuple(_availability_run_from_row(row) for row in rows)
+
+
+def get_latest_successful_availability_run(
+    connection: sqlite3.Connection, location_id: str
+) -> AvailabilityRun | None:
+    row = connection.execute(
+        """
+        SELECT * FROM availability_runs
+        WHERE location_id = ? AND status = 'success'
+        ORDER BY collected_at DESC, run_id DESC
+        LIMIT 1
+        """,
+        (location_id,),
+    ).fetchone()
+    return _availability_run_from_row(row) if row is not None else None
 
 
 def list_availability_slots(

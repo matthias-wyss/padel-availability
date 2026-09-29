@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr-CH">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8fafc">
+    <title>Padel libre — Genève–Lausanne</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Padel libre, accueil">
+        <span class="brand-mark" aria-hidden="true">P</span>
+        <span>PADEL <span class="brand-light">LIBRE</span></span>
+      </a>
+      <div class="refresh-panel">
+        <div id="refresh-message" class="refresh-message" role="status" aria-live="polite">
+          Chargement des disponibilités…
+        </div>
+        <button id="refresh-button" class="button button-primary" type="button">
+          Actualiser
+        </button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">GENÈVE — LAUSANNE</p>
+        <h1 id="page-title">Un terrain libre.<br><span>Au bon moment.</span></h1>
+        <p class="intro-copy">Compare les créneaux publics et réserve directement auprès du club.</p>
+      </section>
+
+      <div class="search-layout">
+        <aside class="filter-column" aria-label="Filtres de recherche">
+          <details id="filter-panel" class="filter-panel" open>
+            <summary>Filtres <span class="summary-hint">Affiner la recherche</span></summary>
+            <div class="filter-content">
+              <fieldset>
+                <legend>Dates <span>14 jours</span></legend>
+                <label class="field-label" for="date-from">Du</label>
+                <input id="date-from" name="date-from" type="date">
+                <label class="field-label" for="date-to">Au</label>
+                <input id="date-to" name="date-to" type="date">
+                <div class="quick-actions">
+                  <button id="evening-preset" class="button button-secondary" type="button">Ce soir</button>
+                  <button id="reset-dates" class="text-button" type="button">Réinitialiser</button>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Heures</legend>
+                <p class="field-hint">Laisse vide pour afficher toute la journée.</p>
+                <div class="time-fields">
+                  <label for="time-from">Dès<input id="time-from" type="time"></label>
+                  <label for="time-to">Jusqu’à<input id="time-to" type="time"></label>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Couverture</legend>
+                <label class="check-row"><input type="checkbox" name="cover" value="indoor" checked> Intérieur</label>
+                <label class="check-row"><input type="checkbox" name="cover" value="outdoor" checked> Extérieur</label>
+                <label class="check-row"><input type="checkbox" name="cover" value="other" checked> Autre / inconnue</label>
+              </fieldset>
+
+              <fieldset class="club-fieldset">
+                <legend>Clubs <span id="club-count"></span></legend>
+                <label class="visually-hidden" for="club-search">Rechercher un club ou une commune</label>
+                <input id="club-search" type="search" placeholder="Club ou commune">
+                <div id="club-list" class="club-list" aria-label="Clubs à inclure"></div>
+              </fieldset>
+            </div>
+          </details>
+        </aside>
+
+        <section class="results-column" aria-labelledby="results-title">
+          <div class="results-heading">
+            <div>
+              <p class="eyebrow">DISPONIBILITÉS PUBLIQUES</p>
+              <h2 id="results-title">Les prochains créneaux</h2>
+            </div>
+            <p id="result-summary" class="result-summary" role="status" aria-live="polite"></p>
+          </div>
+
+          <section id="available-section" class="result-section" aria-labelledby="available-title">
+            <h3 id="available-title">Disponibles <span id="available-count" class="count-pill">0</span></h3>
+            <div id="available-results" class="slot-list"></div>
+          </section>
+
+          <section id="unknown-section" class="result-section status-section" aria-labelledby="unknown-title" hidden>
+            <h3 id="unknown-title">À vérifier</h3>
+            <div id="unknown-results" class="slot-list"></div>
+          </section>
+
+          <section id="stale-section" class="result-section status-section" aria-labelledby="stale-title" hidden>
+            <h3 id="stale-title">Données anciennes</h3>
+            <div id="stale-results" class="slot-list"></div>
+          </section>
+
+          <section id="location-status-section" class="result-section status-section" aria-labelledby="location-status-title" hidden>
+            <h3 id="location-status-title">État des clubs</h3>
+            <ul id="location-status-results" class="location-status-list"></ul>
+          </section>
+
+          <p id="load-error" class="load-error" role="alert" hidden>
+            Les disponibilités ne peuvent pas être chargées pour le moment. Réessaie dans quelques instants.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Les disponibilités sont indicatives. La réservation se fait sur le site du club.</p>
+    </footer>
+  </body>
+</html>
