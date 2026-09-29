@@ -88,10 +88,12 @@ assert locations["cologny"]["slots"][0]["status"] == "available"
 assert locations["collonge-bellerive"]["window_end"] == "2026-10-05"
 ```
 
-Also assert that only configured source IDs appear, the stale window comes from
-the last successful run (not the latest failed run), and GET does not insert an
-availability run. Import the web module inside the test so the pre-implementation
-failure is a test failure, not a test-collection error.
+At the start of the test function, assert
+`importlib.util.find_spec("padel_availability.web") is not None`, then import
+`create_app` inside the function. Also assert that only configured source IDs
+appear, the stale window comes from the last successful run (not the latest
+failed run), and GET does not insert an availability run. The initial failure is
+an assertion, not a test-collection error.
 
 - [ ] **Step 3: Run the API tests and verify the expected failure**
 
@@ -101,7 +103,8 @@ Run:
 PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web.py
 ```
 
-Expected: the API test fails because the web module/route does not exist yet.
+Expected: the API test fails its module-presence assertion because the web app
+is not implemented yet.
 
 - [ ] **Step 4: Implement the read-only snapshot endpoint**
 
@@ -141,9 +144,12 @@ runs.
 
 - [ ] **Step 1: Write failing refresh state and cooldown tests**
 
-With a temporary database and a fake `RefreshRunner`, assert that the first
-manual request returns HTTP status 202 and creates one queued job; a request
-while a job is active returns 409 with its status; a request within the
+At the start of each test, assert
+`importlib.util.find_spec("padel_availability.refresh") is not None`, then import
+`RefreshCoordinator` inside the test. With a temporary database and a fake
+`RefreshRunner`, assert that the first manual request returns HTTP status 202
+and creates one queued job; a request while a job is active returns 409 with its
+status; a request within the
 five-minute global cooldown returns 429 and `next_allowed_at`; and a request
 after cooldown returns 202. Assert that scheduled triggers use the same
 cooldown/active-job state and skip blocked ticks instead of queueing them.
@@ -156,8 +162,8 @@ Run:
 PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_refresh.py
 ```
 
-Expected: refresh tests fail because the refresh-state table/coordinator are
-not implemented yet.
+Expected: the refresh tests fail their module-presence assertion because the
+refresh-state table/coordinator are not implemented yet.
 
 - [ ] **Step 3: Add persisted refresh state and transaction helpers**
 
@@ -350,14 +356,13 @@ with no published port. Both mount the same persistent SQLite volume at
 `/data/catalog.sqlite3`, use `Europe/Zurich`, restart unless stopped, and use a
 health check against `/healthz`. Do not mount the Git checkout over `/data`.
 
-- [ ] **Step 3: Build and smoke-test on CT103 after publishing the tested commit**
+- [ ] **Step 3: Validate the Compose configuration**
 
-Build the committed image on CT103 with
-`docker compose -f /opt/padel-availability/deploy/ct103/compose.yaml build`.
-Before connecting production SQLite, start a test Compose project with a
-temporary named volume and verify `/healthz`, API status, refresh cooldown, one
-active job, and graceful shutdown. Keep that test volume separate from the
-production `/var/lib/padel-availability` bind mount.
+Run `docker compose -f deploy/ct103/compose.yaml config` from the repository
+root. Check that only the web container publishes a port, both services share
+the persistent DB mount, the worker starts exactly once, and no secret or
+development volume appears in the rendered configuration. Build/runtime smoke
+testing happens on CT103 in Task 7 because CT108 cannot access its Docker socket.
 
 ### Task 7: Publish the repository and deploy on CT103/NPM
 
@@ -382,12 +387,13 @@ instead of forcing a push.
 
 - [ ] **Step 3: Pull/build the public repository on CT103**
 
-Clone the public repo over HTTPS into `/opt/padel-availability`, create the
-persistent `/var/lib/padel-availability` data directory, and deploy with the
-checked-in Compose file. Bootstrap the database, trigger the initial full
-collection locally on CT103, and verify all configured locations have a
-meaningful outcome before opening the public NPM route. Show each server write
-command before running it and verify it afterward.
+Clone the public repo over HTTPS into `/opt/padel-availability` (or pull there
+if already cloned), create the persistent `/var/lib/padel-availability` data
+directory, and run the checked-in database bootstrap before starting services.
+Build/start with `docker compose -f deploy/ct103/compose.yaml up -d --build`.
+Trigger the initial full collection through the local app API, verify all
+configured locations have a meaningful outcome, and only then add the public NPM
+route. Show each server write command before running it and verify it afterward.
 
 - [ ] **Step 4: Configure and verify NPM**
 
