@@ -2,7 +2,7 @@
 
 ## Status
 
-Design approved; written spec awaiting user review, 2026-09-29.
+Design approved; README and AGENTS.md added to scope; written spec review pending, 2026-09-29.
 
 ## Goal
 
@@ -74,8 +74,8 @@ Use the verified UI/UX Pro Max direction **Minimalism & Swiss Style**: neutral
 surfaces, clear grid, compact readable cards, and a blue primary action. Use the
 verified finder palette as guidance: blue (`#2563EB`) for primary controls,
 available green, uncertain amber, occupied/error red, and neutral surfaces.
-Statuses also need text labels; color alone must not convey availability. Use a readable
-sans-serif/system fallback, visible keyboard focus, and labeled native controls.
+Statuses also need text labels; color alone must not convey availability. Use a
+readable sans-serif/system fallback, visible keyboard focus, and labeled native controls.
 Do not use emoji as UI icons. Do not add a map in v1 because venue coordinates
 are incomplete.
 
@@ -115,6 +115,20 @@ Any real CT103/CT100 deployment change must be verified and reflected in the
 matching `workspace/infra/` documentation and committed/pushed there as required
 by the infra repository instructions.
 
+## Project documentation
+
+- Rewrite the root `README.md` as the operator/user entry point: local setup,
+  catalog initialization, supported collection commands, the web app's search
+  and status behavior, source-specific availability windows, refresh cadence,
+  public deployment URL, and where production data persists.
+- Create a root `AGENTS.md` with repo-specific contribution rules: Python 3.12
+  and quality-check commands, visible-public-DOM-only collection, no booking or
+  private endpoints, preservation of unknown/stale distinctions, no committing
+  ignored SQLite databases or secrets, and the infra-document process for real
+  CT103/CT100 changes.
+- Keep instructions concise and consistent with the existing workspace and
+  cluster-level `AGENTS.md`; the project file adds repo context, not overrides.
+
 ## Acceptance checks
 
 - A visitor can select configured clubs and indoor/outdoor coverage, enter a
@@ -129,3 +143,5 @@ by the infra repository instructions.
   and does not rely on color alone.
 - CT103 can pull the public GitHub repo and deploy without overwriting the
   persistent SQLite volume; NPM serves the public hostname over HTTPS.
+- README and `AGENTS.md` describe the implemented commands, public/read-only
+  boundaries, snapshot semantics, deployment layout, and verification checks.
