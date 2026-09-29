@@ -45,7 +45,7 @@
 
 **Modify:**
 - `pyproject.toml`, `uv.lock` — Flask/Waitress web dependency group and web/worker console entry points.
-- `src/padel_availability/database.py` — refresh-job and singleton cooldown tables plus helpers.
+- `src/padel_availability/database.py` — last-success lookup plus refresh-job/singleton cooldown tables and helpers.
 - `README.md` — operator and user guide for CLI collectors and the public web app.
 - `/home/agentops/workspace/infra/containers/ct103-services.md` — deployed app, volume, port, and runbook.
 - `/home/agentops/workspace/infra/03-network-security.md` — public NPM hostname and exposure.
@@ -57,10 +57,11 @@
 **Files:**
 - Create: `src/padel_availability/web.py`
 - Test: `tests/test_web.py`
-- Modify: `pyproject.toml`, `uv.lock`
+- Modify: `src/padel_availability/database.py`, `pyproject.toml`, `uv.lock`
 
 **Interfaces:**
 - `create_app(database_path: Path, data_directory: Path) -> Flask`
+- `get_latest_successful_availability_run(connection: sqlite3.Connection, location_id: str) -> AvailabilityRun | None`
 - `GET /healthz` returns `200` with a minimal health response.
 - `GET /api/availability` returns JSON containing `generated_at` and a `locations` object keyed by `location_id`. Each value contains `canonical_name`, `municipality`, `overall_cover_status`, `booking_url`, `snapshot_status`, `window_start`, `window_end`, `last_success_at`, and `slots` (`court_label`, `starts_at`, `ends_at`, `status`).
 
@@ -137,7 +138,7 @@ runs.
 
 **Interfaces:**
 - `RefreshStatus` contains `job_id: str | None`, `trigger: Literal["manual", "scheduled"] | None`, `status: Literal["idle", "queued", "running", "success", "partial", "error"]`, request/start/finish timestamps, completed/total location counts, `next_allowed_at: str | None`, and bounded error text.
-- `RefreshCoordinator(database_path: Path, data_directory: Path, runner: RefreshRunner | None = None)` exposes `request_manual(now: datetime | None = None) -> tuple[RefreshStatus, int]`, `status() -> RefreshStatus`, `enqueue_scheduled(now: datetime) -> bool`, `run_pending_once(now: datetime) -> bool`, `start_worker() -> None`, and `stop_worker() -> None`.
+- `RefreshCoordinator(database_path: Path, data_directory: Path, runner: RefreshRunner | None = None)` exposes `request_manual(now: datetime | None = None) -> tuple[RefreshStatus, int]`, `status() -> RefreshStatus`, `enqueue_scheduled(now: datetime) -> bool`, `run_pending_once(now: datetime) -> bool`, and `run_forever(stop_event: threading.Event) -> None`.
 - `RefreshRunner = Callable[[sqlite3.Connection, Path, datetime, Callable[[CollectionOutcome], None]], tuple[CollectionOutcome, ...]]`.
 - `run_all_sources(connection: sqlite3.Connection, data_directory: Path, now: datetime, on_outcome: Callable[[CollectionOutcome], None]) -> tuple[CollectionOutcome, ...]` calls the six existing `collect_*` functions sequentially.
 - Add `padel-availability-web = "padel_availability.web:main"` and `padel-availability-worker = "padel_availability.refresh:main"` to `[project.scripts]`; update `uv.lock`.
@@ -153,6 +154,12 @@ status; a request within the
 five-minute global cooldown returns 429 and `next_allowed_at`; and a request
 after cooldown returns 202. Assert that scheduled triggers use the same
 cooldown/active-job state and skip blocked ticks instead of queueing them.
+
+Also test `run_all_sources` with fake collector callables and the real source
+manifests. Assert the five non-Plugin collector families receive
+`horizon_days=14` and Plugin receives these `(location_id, horizon_days)` pairs:
+`collonge-bellerive`, `cologny`, `csu-champel`, `drizia-miremont`, `fraisiers`,
+and `mies-tannay` at 7 days; `crans-vd` at 3 days; and `gland` at 14 days.
 
 - [ ] **Step 2: Run the refresh tests and verify the expected failure**
 
@@ -226,6 +233,10 @@ jobs share the persisted lock/cooldown.
 - Create: `src/padel_availability/static/app.css`
 - Create: `src/padel_availability/static/app.js`
 - Test: `tests/test_web_ui.py`
+
+**Filter rule:** Compare slot start times in `Europe/Zurich` against the
+half-open `[start, end)` range. Keep the slot's full end time and duration in
+the result even if it extends beyond the requested end time.
 
 - [ ] **Step 1: Add failing browser tests for the evening search**
 
