@@ -690,6 +690,7 @@ class _FakeEvernessPage:
         self.bootstrap_month_label = bootstrap_month_label
         self.date_controls_missing_for = date_controls_missing_for or set()
         self.direct_date_navigation = False
+        self.navigation_pending = False
         self.closed = False
         self.wait_ticks = 0
         self.wait_until: str | None = None
@@ -717,6 +718,8 @@ class _FakeEvernessPage:
         self.events.append(f"goto:{url}")
         requested_dates = parse_qs(urlsplit(url).query).get("date", [])
         if requested_dates:
+            if self.navigation_pending:
+                raise TimeoutError("a calendar navigation is still pending")
             self.current_date = date.fromisoformat(requested_dates[-1])
             self.direct_date_navigation = True
             self.date_transition_started = False
@@ -828,12 +831,14 @@ class _FakeEvernessPage:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
             self.direct_date_navigation = False
+            self.navigation_pending = selected in self.date_controls_missing_for
             self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         if selector == "#datepicker .day" and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
             self.direct_date_navigation = False
+            self.navigation_pending = selected in self.date_controls_missing_for
             self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         elif selector == "#datepicker .next":
@@ -859,17 +864,31 @@ class _FakeEvernessPage:
 
 
 class _FakeEvernessContext:
-    def __init__(self, page: _FakeEvernessPage, events: list[str]) -> None:
+    def __init__(
+        self,
+        page: _FakeEvernessPage,
+        events: list[str],
+        fallback_page: _FakeEvernessPage | None = None,
+    ) -> None:
         self.page = page
+        self.fallback_page = fallback_page
         self.events = events
+        self.page_count = 0
         self.closed = False
 
     def new_page(self) -> _FakeEvernessPage:
         self.events.append("new_page")
-        return self.page
+        self.page_count += 1
+        if self.page_count == 1:
+            return self.page
+        if self.page_count == 2 and self.fallback_page is not None:
+            return self.fallback_page
+        raise AssertionError("unexpected extra Everness page")
 
     def close(self) -> None:
         self.page.closed = True
+        if self.fallback_page is not None:
+            self.fallback_page.closed = True
         self.closed = True
         self.events.append("context_close")
 
@@ -965,22 +984,25 @@ def _everness_connector(
     date_controls_missing_for: set[date] | None = None,
     booking_url: str = "https://padel.everness.ch/",
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
-    page = _FakeEvernessPage(
-        dates,
-        initial_date,
-        events,
-        programming_error=programming_error,
-        transition_error=transition_error,
-        french_datepicker=french_datepicker,
-        jquery_ui_datepicker=jquery_ui_datepicker,
-        datepicker_hidden=datepicker_hidden,
-        initial_payloads=initial_payloads,
-        jquery_month_value=jquery_month_value,
-        jquery_year_value=jquery_year_value,
-        bootstrap_month_label=bootstrap_month_label,
-        date_controls_missing_for=date_controls_missing_for,
-    )
-    context = _FakeEvernessContext(page, events)
+    def make_page() -> _FakeEvernessPage:
+        return _FakeEvernessPage(
+            dates,
+            initial_date,
+            events,
+            programming_error=programming_error,
+            transition_error=transition_error,
+            french_datepicker=french_datepicker,
+            jquery_ui_datepicker=jquery_ui_datepicker,
+            datepicker_hidden=datepicker_hidden,
+            initial_payloads=initial_payloads,
+            jquery_month_value=jquery_month_value,
+            jquery_year_value=jquery_year_value,
+            bootstrap_month_label=bootstrap_month_label,
+            date_controls_missing_for=date_controls_missing_for,
+        )
+
+    page = make_page()
+    context = _FakeEvernessContext(page, events, make_page())
     browser = _FakeEvernessBrowser(context, events)
     source = EvernessSource(
         "everness",
@@ -1081,10 +1103,11 @@ def test_everness_connector_selects_each_requested_date() -> None:
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 
-def test_everness_connector_uses_public_date_url_when_calendar_controls_disappear() -> None:
+def test_everness_connector_uses_public_date_url_when_calendar_navigation_is_pending() -> None:
     events: list[str] = []
     first = date(2026, 9, 22)
     second = date(2026, 9, 23)
+    third = date(2026, 9, 24)
     dates = {
         first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
         second: [
@@ -1094,6 +1117,13 @@ def test_everness_connector_uses_public_date_url_when_calendar_controls_disappea
                 fingerprint="grid-2",
                 rows=[("09:00", ["cursor"]), ("10:30", ["notallowed"])],
             ),
+        ],
+        third: [
+            _everness_payload(
+                third,
+                fingerprint="grid-3",
+                rows=[("09:00", ["notallowed"]), ("10:30", ["cursor"])],
+            )
         ],
     }
     booking_url = "https://padel.everness.ch/?club=geneva&date=2026-09-22"
@@ -1109,15 +1139,17 @@ def test_everness_connector_uses_public_date_url_when_calendar_controls_disappea
         _everness_location(),
         run_id="run-everness",
         window_start=first,
-        window_end=date(2026, 9, 24),
+        window_end=date(2026, 9, 25),
         collected_at="2026-09-22T07:00:00Z",
     )
     connector.close()
 
     assert result.run.status == "success"
-    assert len(result.slots) == 2
+    assert len(result.slots) == 4
     assert f"goto:{booking_url}" in events
     assert "goto:https://padel.everness.ch/?club=geneva&date=2026-09-23" in events
+    assert "goto:https://padel.everness.ch/?club=geneva&date=2026-09-24" in events
+    assert events.count("new_page") == 2
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 

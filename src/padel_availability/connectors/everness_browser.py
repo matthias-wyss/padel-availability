@@ -843,20 +843,9 @@ class EvernessBrowserConnector:
                 page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
                 _wait_for_everness_page(page, self._timeout_ms)
                 current_date = window_start
+                use_public_date_urls = False
                 while current_date < window_end:
-                    previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
-                    try:
-                        _select_everness_date(page, current_date, self._timeout_ms)
-                        payload = _wait_for_everness_date(
-                            page, current_date, previous_payload, self._timeout_ms
-                        )
-                    except EvernessBrowserError as error:
-                        message = str(error)
-                        if not (
-                            message.startswith("visible Everness control ")
-                            and message.endswith(" was not found")
-                        ):
-                            raise
+                    if use_public_date_urls:
                         page.goto(
                             _everness_date_url(source.booking_url, current_date),
                             wait_until="commit",
@@ -865,6 +854,32 @@ class EvernessBrowserConnector:
                         payload = _wait_for_everness_page(
                             page, self._timeout_ms, requested_date=current_date
                         )
+                    else:
+                        previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+                        try:
+                            _select_everness_date(page, current_date, self._timeout_ms)
+                            payload = _wait_for_everness_date(
+                                page, current_date, previous_payload, self._timeout_ms
+                            )
+                        except EvernessBrowserError as error:
+                            message = str(error)
+                            if not (
+                                message.startswith("visible Everness control ")
+                                and message.endswith(" was not found")
+                            ):
+                                raise
+                            page = context.new_page()
+                            page.set_default_timeout(self._timeout_ms)
+                            page.set_default_navigation_timeout(self._timeout_ms)
+                            page.goto(
+                                _everness_date_url(source.booking_url, current_date),
+                                wait_until="commit",
+                                timeout=self._timeout_ms,
+                            )
+                            payload = _wait_for_everness_page(
+                                page, self._timeout_ms, requested_date=current_date
+                            )
+                            use_public_date_urls = True
                     observations.extend(parse_everness_dom(payload, current_date))
                     current_date += timedelta(days=1)
             finally:
