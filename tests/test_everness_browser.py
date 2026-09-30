@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from typing import Any, Self, cast
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -671,6 +672,7 @@ class _FakeEvernessPage:
         jquery_month_value: str | None = None,
         jquery_year_value: str | None = None,
         bootstrap_month_label: str | None = None,
+        date_controls_missing_for: set[date] | None = None,
     ) -> None:
         self.dates = dates
         self.current_date = initial_date
@@ -686,6 +688,8 @@ class _FakeEvernessPage:
         self.jquery_month_value = jquery_month_value
         self.jquery_year_value = jquery_year_value
         self.bootstrap_month_label = bootstrap_month_label
+        self.date_controls_missing_for = date_controls_missing_for or set()
+        self.direct_date_navigation = False
         self.closed = False
         self.wait_ticks = 0
         self.wait_until: str | None = None
@@ -711,6 +715,12 @@ class _FakeEvernessPage:
         del timeout
         self.wait_until = wait_until
         self.events.append(f"goto:{url}")
+        requested_dates = parse_qs(urlsplit(url).query).get("date", [])
+        if requested_dates:
+            self.current_date = date.fromisoformat(requested_dates[-1])
+            self.direct_date_navigation = True
+            self.date_transition_started = False
+            self.pending = [dict(payload) for payload in self.dates[self.current_date][:-1]]
 
     def evaluate(self, expression: str, arg: object = None) -> object:
         del arg
@@ -732,6 +742,12 @@ class _FakeEvernessPage:
         self.events.append(f"wait:{timeout}")
 
     def locator_count(self, selector: str) -> int:
+        if (
+            selector == "#multi-language-date"
+            and self.current_date in self.date_controls_missing_for
+            and not self.direct_date_navigation
+        ):
+            return 0
         if selector in {"#table_reservation", "#datepicker", "#multi-language-date"}:
             return 1
         if self.jquery_ui_datepicker and selector in {
@@ -811,11 +827,13 @@ class _FakeEvernessPage:
         if selector == '#datepicker td[data-handler="selectDay"]' and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
+            self.direct_date_navigation = False
             self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         if selector == "#datepicker .day" and index is not None:
             selected = date(self.current_date.year, self.current_date.month, index + 1)
             self.current_date = selected
+            self.direct_date_navigation = False
             self.date_transition_started = True
             self.pending = [dict(payload) for payload in self.dates[selected][:-1]]
         elif selector == "#datepicker .next":
@@ -944,6 +962,8 @@ def _everness_connector(
     jquery_month_value: str | None = None,
     jquery_year_value: str | None = None,
     bootstrap_month_label: str | None = None,
+    date_controls_missing_for: set[date] | None = None,
+    booking_url: str = "https://padel.everness.ch/",
 ) -> tuple[EvernessBrowserConnector, _FakeEvernessPage, _FakeEvernessContext]:
     page = _FakeEvernessPage(
         dates,
@@ -958,12 +978,13 @@ def _everness_connector(
         jquery_month_value=jquery_month_value,
         jquery_year_value=jquery_year_value,
         bootstrap_month_label=bootstrap_month_label,
+        date_controls_missing_for=date_controls_missing_for,
     )
     context = _FakeEvernessContext(page, events)
     browser = _FakeEvernessBrowser(context, events)
     source = EvernessSource(
         "everness",
-        "https://padel.everness.ch/",
+        booking_url,
         "2026-09-22T00:00:00Z",
         "public",
     )
@@ -1057,6 +1078,46 @@ def test_everness_connector_selects_each_requested_date() -> None:
 
     assert "click:#datepicker .day:21" not in events
     assert "click:#datepicker .day:22" in events
+    assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
+
+
+def test_everness_connector_uses_public_date_url_when_calendar_controls_disappear() -> None:
+    events: list[str] = []
+    first = date(2026, 9, 22)
+    second = date(2026, 9, 23)
+    dates = {
+        first: [_everness_payload(first, fingerprint="grid-1", rows=[])],
+        second: [
+            _everness_payload(first, fingerprint="stale-route", rows=[]),
+            _everness_payload(
+                second,
+                fingerprint="grid-2",
+                rows=[("09:00", ["cursor"]), ("10:30", ["notallowed"])],
+            ),
+        ],
+    }
+    booking_url = "https://padel.everness.ch/?club=geneva&date=2026-09-22"
+    connector, _page, _context = _everness_connector(
+        dates,
+        events,
+        initial_date=first,
+        date_controls_missing_for={second},
+        booking_url=booking_url,
+    )
+
+    result = connector.collect(
+        _everness_location(),
+        run_id="run-everness",
+        window_start=first,
+        window_end=date(2026, 9, 24),
+        collected_at="2026-09-22T07:00:00Z",
+    )
+    connector.close()
+
+    assert result.run.status == "success"
+    assert len(result.slots) == 2
+    assert f"goto:{booking_url}" in events
+    assert "goto:https://padel.everness.ch/?club=geneva&date=2026-09-23" in events
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 

@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import pairwise
 from typing import Literal, Protocol, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from ..availability import AvailabilityResult, AvailabilityRun, AvailabilitySlot
@@ -265,6 +266,15 @@ def _parse_date_label(label: str) -> date:
         if weekday_number is None or weekday_number != parsed.weekday():
             raise EvernessBrowserError("visible DOM has an invalid date label")
     return parsed
+
+
+def _everness_date_url(booking_url: str, requested_date: date) -> str:
+    url = urlsplit(booking_url)
+    query = [
+        (key, value) for key, value in parse_qsl(url.query, keep_blank_values=True) if key != "date"
+    ]
+    query.append(("date", requested_date.isoformat()))
+    return urlunsplit(url._replace(query=urlencode(query)))
 
 
 def _parse_row_time(value: object) -> time:
@@ -551,15 +561,18 @@ def _wait_for_everness_locator(
     raise EvernessBrowserError(f"visible Everness control {selector} was not found")
 
 
-def _wait_for_everness_page(page: _EvernessPage, timeout_ms: int) -> object:
+def _wait_for_everness_page(
+    page: _EvernessPage, timeout_ms: int, requested_date: date | None = None
+) -> object:
     for _ in range(max(1, timeout_ms // 100)):
         payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
         _everness_payload_text(payload)
         dom = _dom_mapping(payload)
         try:
-            date_ready = (
-                dom.get("view") == "booking" and _everness_payload_date(payload) is not None
-            )
+            payload_date = _everness_payload_date(payload)
+            date_ready = dom.get("view") == "booking" and payload_date is not None
+            if requested_date is not None:
+                date_ready = date_ready and payload_date == requested_date
         except EvernessBrowserError:
             date_ready = False
         if (
@@ -832,10 +845,26 @@ class EvernessBrowserConnector:
                 current_date = window_start
                 while current_date < window_end:
                     previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
-                    _select_everness_date(page, current_date, self._timeout_ms)
-                    payload = _wait_for_everness_date(
-                        page, current_date, previous_payload, self._timeout_ms
-                    )
+                    try:
+                        _select_everness_date(page, current_date, self._timeout_ms)
+                        payload = _wait_for_everness_date(
+                            page, current_date, previous_payload, self._timeout_ms
+                        )
+                    except EvernessBrowserError as error:
+                        message = str(error)
+                        if not (
+                            message.startswith("visible Everness control ")
+                            and message.endswith(" was not found")
+                        ):
+                            raise
+                        page.goto(
+                            _everness_date_url(source.booking_url, current_date),
+                            wait_until="commit",
+                            timeout=self._timeout_ms,
+                        )
+                        payload = _wait_for_everness_page(
+                            page, self._timeout_ms, requested_date=current_date
+                        )
                     observations.extend(parse_everness_dom(payload, current_date))
                     current_date += timedelta(days=1)
             finally:
