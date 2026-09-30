@@ -2,7 +2,7 @@
 
 ## Status
 
-Design approved in chat; written spec awaiting user review, 2026-09-30.
+Design and written spec approved by the user, 2026-09-30.
 
 ## Goal
 
