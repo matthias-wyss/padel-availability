@@ -1,6 +1,7 @@
 (() => {
   const timezone = "Europe/Zurich";
   const storageKey = "padelAvailability.selectedLocations";
+  const dateLinkHosts = new Set(["playtomic.com", "playtomic.io", "padel.everness.ch"]);
   const dateFormatter = new Intl.DateTimeFormat("fr-CH", {
     timeZone: timezone,
     dateStyle: "full",
@@ -159,18 +160,21 @@
     }[status] || "Couverture inconnue";
   }
 
-  function createSlotCard(location, slot, state) {
+  function bookingUrl(location, slot) {
+    const url = new URL(location.booking_url);
+    if (!dateLinkHosts.has(url.hostname)) return location.booking_url;
+    url.searchParams.set("date", localDate(slot.starts_at));
+    return url.href;
+  }
+
+  function createSlotCard(group, state) {
+    const { location, slot } = group;
     const article = document.createElement("article");
     article.className = `slot-card${state === "unknown" ? " is-unknown" : ""}${state === "stale" ? " is-stale" : ""}`;
     article.dataset.locationId = location.location_id;
 
-    const main = document.createElement("div");
-    main.className = "slot-main";
-    const title = document.createElement("h4");
-    title.textContent = location.canonical_name;
-    const municipality = document.createElement("p");
-    municipality.className = "slot-location";
-    municipality.textContent = location.municipality;
+    const timeBlock = document.createElement("div");
+    timeBlock.className = "slot-time-block";
     const time = document.createElement("p");
     time.className = "slot-time";
     const start = document.createElement("time");
@@ -188,6 +192,16 @@
     const durationText = document.createElement("span");
     durationText.className = "slot-duration";
     durationText.textContent = `${duration} min`;
+    timeBlock.append(time, durationText);
+
+    const main = document.createElement("div");
+    main.className = "slot-main";
+    const title = document.createElement("h4");
+    title.textContent = location.canonical_name;
+    const municipality = document.createElement("p");
+    municipality.className = "slot-location";
+    municipality.textContent = location.municipality;
+    main.append(title, municipality);
 
     const badges = document.createElement("div");
     badges.className = "slot-badges";
@@ -199,14 +213,35 @@
     cover.textContent = coverLabel(location.overall_cover_status);
     badges.append(stateBadge, cover);
 
-    main.append(title, municipality);
-    if (slot.court_label) {
+    if (group.courtLabels.length > 0) {
       const court = document.createElement("p");
       court.className = "slot-court";
-      court.textContent = slot.court_label;
+      court.textContent = group.courtLabels.join(" · ");
       main.append(court);
     }
-    main.append(time, durationText, badges);
+    const courtCount = document.createElement("p");
+    courtCount.className = "slot-court-count";
+    if (group.unidentifiedCount === 0) {
+      const count = group.courtLabels.length;
+      const label = state === "unknown"
+        ? "à vérifier"
+        : state === "stale"
+          ? "avec données anciennes"
+          : "libres";
+      courtCount.textContent = `${count} terrain${count === 1 ? "" : "s"} ${label}`;
+    } else if (group.courtLabels.length > 0) {
+      const count = group.courtLabels.length;
+      const label = count === 1 ? "terrain identifié" : "terrains identifiés";
+      const stateLabel = state === "unknown"
+        ? " à vérifier"
+        : state === "stale"
+          ? " avec données anciennes"
+          : "";
+      courtCount.textContent = `${count} ${label}${stateLabel} · ${group.unidentifiedCount} possibilité${group.unidentifiedCount === 1 ? "" : "s"} non identifiée${group.unidentifiedCount === 1 ? "" : "s"}`;
+    } else {
+      courtCount.textContent = `${group.unidentifiedCount} possibilités`;
+    }
+    main.append(courtCount, badges);
     if (location.last_success_at) {
       const freshness = document.createElement("p");
       freshness.className = "slot-freshness";
@@ -216,11 +251,11 @@
       main.append(freshness);
     }
 
-    article.append(main);
+    article.append(timeBlock, main);
     if (location.booking_url) {
       const booking = document.createElement("a");
       booking.className = "booking-link";
-      booking.href = location.booking_url;
+      booking.href = bookingUrl(location, slot);
       booking.target = "_blank";
       booking.rel = "noopener noreferrer";
       booking.textContent = "Réserver";
@@ -246,15 +281,40 @@
         group.append(heading);
         container.append(group);
       }
-      group.append(createSlotCard(row.location, row.slot, state));
+      group.append(createSlotCard(row, state));
     }
+  }
+
+  function groupSlots(rows) {
+    const groups = new Map();
+    for (const row of rows) {
+      const key = JSON.stringify([
+        row.location.location_id,
+        row.location.snapshot_status,
+        row.slot.status,
+        row.slot.starts_at,
+        row.slot.ends_at,
+      ]);
+      let group = groups.get(key);
+      if (!group) {
+        group = { ...row, slots: [], courtLabels: new Set(), unidentifiedCount: 0 };
+        groups.set(key, group);
+      }
+      group.slots.push(row.slot);
+      if (row.slot.court_label) group.courtLabels.add(row.slot.court_label);
+      else group.unidentifiedCount += 1;
+    }
+    return [...groups.values()].map((group) => ({
+      ...group,
+      courtLabels: [...group.courtLabels],
+    }));
   }
 
   function renderAvailability() {
     const selected = selectedIds();
-    const available = [];
-    const unknown = [];
-    const stale = [];
+    const availableRows = [];
+    const unknownRows = [];
+    const staleRows = [];
     const states = [];
     const endDate = dateTo.value || dateFrom.value;
 
@@ -272,9 +332,9 @@
       const matches = (location.slots || []).filter(matchesFilters);
       for (const slot of matches) {
         if (slot.status === "unavailable") continue;
-        if (location.snapshot_status === "stale") stale.push({ location, slot });
-        else if (slot.status === "unknown") unknown.push({ location, slot });
-        else if (slot.status === "available") available.push({ location, slot });
+        if (location.snapshot_status === "stale") staleRows.push({ location, slot });
+        else if (slot.status === "unknown") unknownRows.push({ location, slot });
+        else if (slot.status === "available") availableRows.push({ location, slot });
       }
 
       if (location.window_end && endDate && endDate > location.window_end) {
@@ -284,6 +344,9 @@
       }
     }
 
+    const available = groupSlots(availableRows);
+    const unknown = groupSlots(unknownRows);
+    const stale = groupSlots(staleRows);
     const availableResults = document.querySelector("#available-results");
     renderSlotGroups(availableResults, available, "available");
     if (available.length === 0) {
@@ -310,7 +373,18 @@
       locationStatuses.append(item);
     }
     document.querySelector("#location-status-section").hidden = states.length === 0;
-    document.querySelector("#result-summary").textContent = `${available.length} créneau${available.length === 1 ? "" : "x"} disponible${available.length === 1 ? "" : "s"}`;
+    const labeledCourts = available.reduce(
+      (total, group) => total + group.courtLabels.length,
+      0,
+    );
+    const unidentifiedPossibilities = available.reduce(
+      (total, group) => total + group.unidentifiedCount,
+      0,
+    );
+    const summary = `${available.length} créneau${available.length === 1 ? "" : "x"} · ${labeledCourts} terrain${labeledCourts === 1 ? "" : "s"} libre${labeledCourts === 1 ? "" : "s"}`;
+    document.querySelector("#result-summary").textContent = unidentifiedPossibilities
+      ? `${summary} · ${unidentifiedPossibilities} possibilités non identifiées`
+      : summary;
   }
 
   function renderClubCount() {

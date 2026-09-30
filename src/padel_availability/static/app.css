@@ -453,13 +453,14 @@ input[type="checkbox"] {
 
 .slot-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px 18px;
+  grid-template-columns: minmax(150px, 0.55fr) minmax(0, 1.45fr) auto;
+  align-items: center;
+  gap: 8px 18px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--green);
   border-radius: var(--radius);
   background: var(--surface);
-  padding: 15px 16px;
+  padding: 10px 14px;
 }
 
 .slot-card.is-unknown {
@@ -471,30 +472,60 @@ input[type="checkbox"] {
 }
 
 .slot-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 14px;
   min-width: 0;
 }
 
 .slot-main h4 {
+  grid-column: 1;
   margin: 0 0 2px;
   font-size: 15px;
 }
 
-.slot-location,
+.slot-location {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 .slot-court,
+.slot-court-count,
 .slot-freshness {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
 }
 
+.slot-court {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.slot-court-count {
+  color: #344256;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.slot-time-block {
+  min-width: 0;
+}
+
 .slot-time {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin: 10px 0 2px;
-  font-size: 17px;
+  margin: 0 0 2px;
+  font-size: 19px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .slot-time-separator {
@@ -513,7 +544,12 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin: 0;
+}
+
+.slot-freshness {
+  grid-column: 1 / -1;
+  font-size: 11px;
 }
 
 .status-badge {
@@ -703,10 +739,31 @@ input[type="checkbox"] {
 
   .slot-card {
     grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px 14px;
   }
 
   .booking-link {
     justify-self: start;
+  }
+
+  .slot-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .slot-main h4,
+  .slot-location,
+  .slot-court,
+  .slot-court-count,
+  .slot-badges,
+  .slot-freshness {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
+  }
+
+  .slot-time {
+    font-size: 18px;
   }
 }
 

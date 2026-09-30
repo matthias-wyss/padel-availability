@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import cast
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -76,6 +77,48 @@ def _availability(day: date) -> dict[str, object]:
                     "ends_at": _utc(day, 20, 30),
                     "status": "available",
                 },
+                {
+                    "court_label": "Court extérieur 4",
+                    "starts_at": _utc(day, 19, 30),
+                    "ends_at": _utc(day, 20, 30),
+                    "status": "available",
+                },
+                {
+                    "court_label": "Court extérieur 5",
+                    "starts_at": _utc(day, 21, 30),
+                    "ends_at": _utc(day, 22, 0),
+                    "status": "available",
+                },
+                {
+                    "court_label": "Court extérieur 0",
+                    "starts_at": _utc(day, 18, 0),
+                    "ends_at": _utc(day, 19, 0),
+                    "status": "available",
+                },
+                {
+                    "court_label": None,
+                    "starts_at": _utc(day, 18, 0),
+                    "ends_at": _utc(day, 19, 0),
+                    "status": "available",
+                },
+                {
+                    "court_label": None,
+                    "starts_at": _utc(day, 18, 30),
+                    "ends_at": _utc(day, 19, 30),
+                    "status": "available",
+                },
+                {
+                    "court_label": None,
+                    "starts_at": _utc(day, 18, 30),
+                    "ends_at": _utc(day, 19, 30),
+                    "status": "available",
+                },
+                {
+                    "court_label": "Court extérieur 6",
+                    "starts_at": _utc(day, 19, 0),
+                    "ends_at": _utc(day, 20, 0),
+                    "status": "unknown",
+                },
             ],
         },
         "csu-champel": {
@@ -95,7 +138,13 @@ def _availability(day: date) -> dict[str, object]:
                     "starts_at": _utc(day, 20, 0),
                     "ends_at": _utc(day, 21, 30),
                     "status": "available",
-                }
+                },
+                {
+                    "court_label": "Court 2",
+                    "starts_at": _utc(day, 20, 0),
+                    "ends_at": _utc(day, 21, 30),
+                    "status": "available",
+                },
             ],
         },
         "drizia-miremont": {
@@ -217,11 +266,29 @@ def test_evening_search_keeps_statuses_and_local_club_selection(
     outdoor_cards = browser_page.locator(
         "#available-results [data-location-id='collonge-bellerive']"
     )
-    assert outdoor_cards.count() == 2
+    assert outdoor_cards.count() == 5
     assert browser_page.locator(
         "#available-results .slot-time time:first-child"
-    ).all_text_contents() == ["19:30", "21:30"]
-    edge_card = outdoor_cards.filter(has_text="21:30")
+    ).all_text_contents() == ["18:00", "18:30", "19:30", "21:30", "21:30"]
+    assert browser_page.locator("#available-results").get_by_text("2 terrains libres").is_visible()
+    assert browser_page.locator("#available-results").get_by_text("2 possibilités").count() == 1
+    assert (
+        browser_page.locator("#available-results")
+        .get_by_text("1 terrain identifié · 1 possibilité non identifiée")
+        .is_visible()
+    )
+    assert (
+        browser_page.locator("#available-results")
+        .get_by_text("Court extérieur 3 · Court extérieur 4")
+        .is_visible()
+    )
+    assert browser_page.locator("#result-summary").get_by_text("5 créneaux").is_visible()
+    assert (
+        browser_page.locator("#result-summary")
+        .get_by_text("3 possibilités non identifiées")
+        .is_visible()
+    )
+    edge_card = outdoor_cards.filter(has_text="Court extérieur 2")
     assert edge_card.get_by_text("22:30").is_visible()
     assert edge_card.get_by_text("60 min").is_visible()
     booking = edge_card.get_by_role("link", name="Réserver")
@@ -232,10 +299,26 @@ def test_evening_search_keeps_statuses_and_local_club_selection(
     assert browser_page.locator("#available-results").get_by_text("Court extérieur 1").count() == 0
 
     assert browser_page.locator("#unknown-results").get_by_text("Court extérieur 1").is_visible()
+    assert (
+        browser_page.locator("#unknown-results [data-location-id='collonge-bellerive']").count()
+        == 1
+    )
     assert browser_page.locator("#stale-results").get_by_text("CSU Champel").is_visible()
+    assert browser_page.locator("#stale-results [data-location-id='csu-champel']").count() == 1
+    assert (
+        browser_page.locator("#stale-results")
+        .get_by_text("2 terrains avec données anciennes")
+        .is_visible()
+    )
     assert browser_page.get_by_text("Pas encore collecté").is_visible()
-    assert browser_page.locator("#stale-results").get_by_text("Données anciennes").is_visible()
-    assert browser_page.locator("#unknown-results").get_by_text("À vérifier").is_visible()
+    assert (
+        browser_page.locator("#stale-results")
+        .get_by_text("Données anciennes", exact=True)
+        .is_visible()
+    )
+    assert (
+        browser_page.locator("#unknown-results").get_by_text("À vérifier", exact=True).is_visible()
+    )
 
     date_to = browser_page.locator("#date-to")
     date_to.fill((today + timedelta(days=10)).isoformat())
@@ -275,6 +358,81 @@ def test_evening_search_keeps_statuses_and_local_club_selection(
 
     browser_page.reload()
     assert browser_page.locator("#club-cologny").is_checked() is False
+    browser_page.set_viewport_size({"width": 1440, "height": 900})
+    desktop_card = browser_page.locator("#available-results .slot-card").filter(
+        has_text="Court extérieur 2"
+    )
+    desktop_card.wait_for()
+    card_box = desktop_card.bounding_box()
+    assert card_box is not None and card_box["height"] <= 160
     for width in (375, 768, 1024, 1440):
         browser_page.set_viewport_size({"width": width, "height": 900})
         assert browser_page.evaluate("document.documentElement.scrollWidth === window.innerWidth")
+
+
+def test_booking_links_open_the_verified_local_date(browser_page: Page, web_server: str) -> None:
+    today = datetime.now(LOCAL_TZ).date()
+    urls = {
+        "padel-station": "https://playtomic.com/fr/clubs/padel-station1",
+        "vaudoise-arena": (
+            "https://playtomic.io/vaudoise-arena/53b5aaf2-7449-4691-96f8-a582ce37144b"
+            "?q=PADEL~2025-03-17~~~"
+        ),
+        "everness": "https://padel.everness.ch/",
+        "bernex": "https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx",
+    }
+    locations = {
+        location_id: {
+            "location_id": location_id,
+            "canonical_name": location_id,
+            "municipality": "Genève",
+            "overall_cover_status": "outdoor",
+            "booking_url": booking_url,
+            "snapshot_status": "success",
+            "window_start": today.isoformat(),
+            "window_end": (today + timedelta(days=7)).isoformat(),
+            "last_success_at": "2026-09-29T10:00:00Z",
+            "slots": [
+                {
+                    "court_label": "Court 1",
+                    "starts_at": _utc(today, 0, 30),
+                    "ends_at": _utc(today, 2, 0),
+                    "status": "available",
+                }
+            ],
+        }
+        for location_id, booking_url in urls.items()
+    }
+    payload = {"generated_at": "2026-09-29T10:00:00Z", "locations": locations}
+    browser_page.route(
+        "**/api/availability",
+        lambda route: route.fulfill(status=200, json=payload),
+    )
+    browser_page.route(
+        "**/api/refresh/status",
+        lambda route: route.fulfill(
+            status=200,
+            json={
+                "status": "idle",
+                "completed_locations": 0,
+                "total_locations": 23,
+                "next_allowed_at": None,
+                "next_scheduled_at": None,
+            },
+        ),
+    )
+    browser_page.goto(web_server)
+
+    for location_id, booking_url in urls.items():
+        link = browser_page.locator(
+            f"#available-results [data-location-id='{location_id}']"
+        ).get_by_role("link", name="Réserver")
+        href = link.get_attribute("href")
+        assert href is not None
+        query = parse_qs(urlsplit(href).query, keep_blank_values=True)
+        if location_id in {"padel-station", "vaudoise-arena", "everness"}:
+            assert query["date"] == [today.isoformat()]
+        else:
+            assert href == booking_url
+        if location_id == "vaudoise-arena":
+            assert query["q"] == ["PADEL~2025-03-17~~~"]

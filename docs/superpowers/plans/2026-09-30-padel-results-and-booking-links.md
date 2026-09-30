@@ -37,9 +37,9 @@
 
 **Files:** `src/padel_availability/static/app.js`, `tests/test_web_ui.py`
 
-**Contract:** A presentation group contains `location`, `snapshot_status`, `slot.status`, exact `starts_at`, exact `ends_at`, unique non-empty court labels, and the number of source entries. Group after applying club/cover/date/time filters. Do not claim a court count when labels are absent; show the neutral source-entry count instead.
+**Contract:** A presentation group contains `location`, `snapshot_status`, `slot.status`, exact `starts_at`, exact `ends_at`, unique non-empty court labels, and an unidentified-entry count. Group after applying club/cover/date/time filters. Show known court names/counts separately from neutral source-entry counts; never call unlabeled rows courts.
 
-- [ ] **Step 1: Add fixture slots for duplicate and different-duration cases**
+- [x] **Step 1: Add fixture slots for duplicate and different-duration cases**
 
 In `tests/test_web_ui.py`, give the same configured outdoor club two `available` rows with the same start/end but different court labels, plus one row with the same start and a different end. Also add two identical-window `unknown` rows, two stale rows in a separate location, and two identical-window rows with no court labels.
 
@@ -52,14 +52,17 @@ assert page.locator("#available-results").get_by_text("Court extérieur 1 · Cou
 assert page.locator("#unknown-results .slot-card[data-location-id='collonge-bellerive']").count() == 1
 assert page.locator("#stale-results .slot-card[data-location-id='csu-champel']").count() == 1
 assert page.locator("#available-results").get_by_text("2 possibilités").count() == 1
+assert page.locator("#available-results").get_by_text(
+    "1 terrain identifié · 1 possibilité non identifiée"
+).is_visible()
 ```
 
-- [ ] **Step 2: Run the UI test and confirm it fails on duplicate cards**
+- [x] **Step 2: Run the UI test and confirm it fails on duplicate cards**
 
 Run `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web_ui.py::test_evening_search_keeps_statuses_and_local_club_selection`.
 Expected: the fixture's two identical windows currently render as two cards.
 
-- [ ] **Step 3: Group filtered rows before rendering**
+- [x] **Step 3: Group filtered rows before rendering**
 
 Add a small `groupSlots(rows)` helper in `app.js`. Use a `Map` keyed by
 `JSON.stringify([location_id, snapshot_status, slot.status, starts_at, ends_at])`.
@@ -78,8 +81,16 @@ function groupSlots(rows) {
       row.slot.starts_at,
       row.slot.ends_at,
     ]);
-    const group = groups.get(key) || { location: row.location, slot: row.slot, slots: [] };
+    const group = groups.get(key) || {
+      location: row.location,
+      slot: row.slot,
+      slots: [],
+      courtLabels: new Set(),
+      unidentifiedCount: 0,
+    };
     group.slots.push(row.slot);
+    if (row.slot.court_label) group.courtLabels.add(row.slot.court_label);
+    else group.unidentifiedCount += 1;
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => ({
@@ -89,21 +100,23 @@ function groupSlots(rows) {
 }
 ```
 
-- [ ] **Step 4: Render one card per group and preserve section semantics**
+- [x] **Step 4: Render one card per group and preserve section semantics**
 
 Update `createSlotCard` to accept a group, render the common time range and
 duration once, display the unique court labels and a `N terrains libres` label
-when every source row has a court label, and use `N possibilités` when labels are
-missing. Keep stale/unknown groups in their separate result arrays.
+when every source row has a court label. Use `N possibilités` when no rows have
+labels; for mixed groups, show the unique labeled courts and the unlabeled
+possibility count separately. Keep stale/unknown groups in their separate result
+arrays.
 
-- [ ] **Step 5: Count grouped windows and court-time opportunities**
+- [x] **Step 5: Count grouped windows and court-time opportunities**
 
 Set `#available-count` to the number of grouped available windows. Set
 `#result-summary` to the grouped-window total plus the sum of each group's
 available-court count (or neutral source-entry count where labels are absent);
 do not count every raw row as a separate time window.
 
-- [ ] **Step 6: Run the targeted browser test**
+- [x] **Step 6: Run the targeted browser test**
 
 Run the Step 2 test again. Expected: duplicate exact windows collapse to one,
 different end times stay separate, and stale/unknown cards remain segregated.
@@ -113,50 +126,55 @@ different end times stay separate, and stale/unknown cards remain segregated.
 **Files:** `src/padel_availability/static/app.js`, `tests/test_web_ui.py`,
 `docs/superpowers/specs/2026-09-30-padel-results-and-booking-links-design.md`
 
-- [ ] **Step 1: Record public date-link behavior for each configured booking family**
+- [x] **Step 1: Record public date-link behavior for each configured booking family**
 
-Use the existing checked-in booking URLs and the configured browser connector
-patterns to open each public booking page. For a sample date in the supported
-window, use only its visible date control and record the page URL before and
-after the date changes. Cover Playtomic `.com`, legacy Playtomic `.io`, AIRPAD,
-Everness, Padel First, Matchpoint, and Plugin.ch. Do not click an available slot
-or any booking/login/payment control. Record whether a stable direct-day URL is
-available; if it is not, note that the existing booking URL remains the fallback.
+Use the checked-in public booking URLs and a sample date of `2026-10-01`. Probe
+`date=2026-10-01` and verify the visible selected date using each connector's
+visible DOM shape. Where the query is ignored and a public date control exists,
+use only that date control and record the URL before/after; do not click an
+available court or any booking/login/payment control. Record Playtomic `.com`,
+legacy Playtomic `.io`, AIRPAD, Everness, Padel First, Matchpoint, and Plugin.ch
+in the spec's validation table. The current probe confirms direct-day URLs for
+Playtomic `.com`, Playtomic `.io`, and Everness; the other four remain on their
+existing booking URLs unless a safe visible route is verified.
 
-- [ ] **Step 2: Add failing tests for the confirmed date URL and fallback**
+- [x] **Step 2: Add failing tests for the confirmed date URL and fallback**
 
-In the browser fixture, give a Playtomic `.com` location the public URL
-`https://playtomic.com/fr/clubs/padel-station1` and a slot on a deterministic
-Europe/Zurich date. Assert the **Réserver** link is
-`https://playtomic.com/fr/clubs/padel-station1?date=2026-10-01`. Give another
-provider an existing query string; assert its link stays byte-for-byte unchanged
-unless Step 1 validates its date format.
+In the browser fixture, include: Playtomic `.com` URL
+`https://playtomic.com/fr/clubs/padel-station1`; legacy `.io` URL
+`https://playtomic.io/vaudoise-arena/53b5aaf2-7449-4691-96f8-a582ce37144b?q=PADEL~2025-03-17~~~`;
+Everness URL `https://padel.everness.ch/`; and an unverified Matchpoint URL
+`https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9`. For slots whose
+Europe/Zurich day is `2026-10-01`, assert the generated `date` parameter on the
+Playtomic and Everness links, preserve the `.io` `q` value, and assert the
+Matchpoint link remains unchanged.
 
-- [ ] **Step 3: Run the focused link test and confirm the date query is missing**
+- [x] **Step 3: Run the focused link test and confirm the date query is missing**
 
 Run `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web_ui.py::test_booking_links_open_the_verified_local_date`. Expected:
 current code returns the base booking URL without a `date` query.
 
-- [ ] **Step 4: Implement the minimal per-platform URL builder**
+- [x] **Step 4: Implement the minimal per-platform URL builder**
 
 Add `bookingUrl(location, slot)` in `app.js`. Convert `slot.starts_at` to its
-Europe/Zurich date. For validated Playtomic `.com` club URLs, construct a `URL`
-and call `searchParams.set("date", localDay)` so existing query components are
-preserved and a duplicate `date` key is not created. Add other source-family
-rules only when Step 1 verified them. Return `location.booking_url` unchanged
-for any unsupported or unverified route.
+Europe/Zurich date. For `playtomic.com`, `playtomic.io`, and `padel.everness.ch`,
+construct a `URL` and call `searchParams.set("date", localDay)` so existing
+query components are preserved and duplicate `date` keys are not created.
+Return `location.booking_url` unchanged for AIRPAD, Matchpoint, Padel First, and
+Plugin.ch; their sample-date probes did not verify a direct-day URL.
 
 ```javascript
 function bookingUrl(location, slot) {
   const url = new URL(location.booking_url);
   const localDay = localDate(slot.starts_at);
-  if (url.hostname === "playtomic.com") url.searchParams.set("date", localDay);
-  // Add only provider rules recorded by Step 1; otherwise keep the verified URL.
+  if (["playtomic.com", "playtomic.io", "padel.everness.ch"].includes(url.hostname)) {
+    url.searchParams.set("date", localDay);
+  }
   return url.href;
 }
 ```
 
-- [ ] **Step 5: Run the link and UI tests**
+- [x] **Step 5: Run the link and UI tests**
 
 Run `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web_ui.py tests/test_web.py`.
 Expected: Playtomic opens the selected local day; unverified provider URLs remain
@@ -166,19 +184,19 @@ unchanged; booking links still open safely in a new tab.
 
 **Files:** `src/padel_availability/static/app.js`, `src/padel_availability/static/app.css`, `tests/test_web_ui.py`
 
-- [ ] **Step 1: Add browser assertions for the compact row structure**
+- [x] **Step 1: Add browser assertions for the compact row structure**
 
 For one grouped card, assert the time range, club/municipality, duration,
 coverage, court count/labels, update time, and reservation link remain visible.
 Assert the card is one row at a 1440px viewport and stacks at 375px without
 horizontal overflow; keyboard focus and 44px booking targets remain.
 
-- [ ] **Step 2: Run the layout assertions before changing CSS**
+- [x] **Step 2: Run the layout assertions before changing CSS**
 
 Run the focused browser test. Expected: the current tall two-column result card
 does not satisfy the compact row/card class structure.
 
-- [ ] **Step 3: Apply the compact Swiss-style layout**
+- [x] **Step 3: Apply the compact Swiss-style layout**
 
 Update the slot-card markup and existing CSS tokens only: desktop rows place the
 time range and venue first, court/count and status metadata next, and one
@@ -198,7 +216,7 @@ The result row's content order is:
 </article>
 ```
 
-- [ ] **Step 4: Re-run the browser interaction and responsive checks**
+- [x] **Step 4: Re-run the browser interaction and responsive checks**
 
 Run `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web_ui.py` and
 `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_web.py`. Expected: the
@@ -209,13 +227,13 @@ selection persists, and all viewport/keyboard assertions pass.
 
 **Files:** `README.md`, plan/spec, CT103 Compose deployment, infra docs.
 
-- [ ] **Step 1: Update the user guide**
+- [x] **Step 1: Update the user guide**
 
 Document one card per exact club/time window, how court counts/labels work,
 grouped summary semantics, direct-date links by validated provider, and the
 existing-link fallback when no safe date route exists.
 
-- [ ] **Step 2: Run quality checks**
+- [x] **Step 2: Run quality checks**
 
 Run `PYTHONPATH=src .venv/bin/python -m pytest -q`, `.venv/bin/ruff check .`,
 `.venv/bin/ruff format --check src tests`, and `.venv/bin/pyright`. Expected: all

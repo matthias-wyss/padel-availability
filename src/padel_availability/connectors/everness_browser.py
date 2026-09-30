@@ -555,8 +555,16 @@ def _wait_for_everness_page(page: _EvernessPage, timeout_ms: int) -> object:
     for _ in range(max(1, timeout_ms // 100)):
         payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
         _everness_payload_text(payload)
+        dom = _dom_mapping(payload)
+        try:
+            date_ready = (
+                dom.get("view") == "booking" and _everness_payload_date(payload) is not None
+            )
+        except EvernessBrowserError:
+            date_ready = False
         if (
-            page.locator("#table_reservation").count() == 1
+            date_ready
+            and page.locator("#table_reservation").count() == 1
             and page.locator("#table_reservation").is_visible()
             and page.locator("#datepicker").count() == 1
             and page.locator("#multi-language-date").count() == 1

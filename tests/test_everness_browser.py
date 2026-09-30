@@ -14,6 +14,7 @@ from padel_availability.connectors.everness_browser import (
     EvernessBrowserError,
     _datepicker_month,  # pyright: ignore[reportPrivateUsage]
     _parse_date_label,  # pyright: ignore[reportPrivateUsage]
+    _wait_for_everness_page,  # pyright: ignore[reportPrivateUsage]
     parse_everness_dom,
     parse_everness_observations,
 )
@@ -970,6 +971,28 @@ def _everness_connector(
         page,
         context,
     )
+
+
+def test_everness_page_waits_for_its_date_label_to_be_visible() -> None:
+    events: list[str] = []
+    transitional: dict[str, object] = _everness_payload(REQUESTED_DATE, fingerprint="transitional")
+    transitional.update({"view": "unknown", "date_label": "", "courts": [], "rows": []})
+    ready = _everness_payload(
+        REQUESTED_DATE,
+        fingerprint="grid-ready",
+        rows=[("18:00", ["cursor"])],
+    )
+    page = _FakeEvernessPage(
+        {REQUESTED_DATE: [ready]},
+        REQUESTED_DATE,
+        events,
+        initial_payloads=[transitional],
+    )
+
+    payload = _wait_for_everness_page(page, 200)
+
+    assert cast(dict[str, object], payload)["view"] == "booking"
+    assert page.wait_ticks == 1
 
 
 def test_everness_connector_collects_grid_and_closes_context() -> None:

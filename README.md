@@ -63,8 +63,18 @@ range, it shows all times; **Ce soir** selects today from 18:00 to 22:00. The
 club checklist starts with all 23 configured locations selected and stores later
 choices only in that browser's local storage.
 
-Results are grouped by date in `Europe/Zurich`. A **Réserver** link opens the
-club's own booking page in a new tab. Availability meaning stays explicit:
+Results are grouped by date in `Europe/Zurich`. When multiple courts have the
+same club, start, and end time, they share one compact card with court labels
+and counts; different durations stay separate. The summary counts grouped time
+windows and court-time opportunities, not one card per court. If a source does
+not name courts, its row count is shown as possibilities rather than inferred
+physical courts.
+
+**Réserver** opens the selected day on Playtomic `.com`/`.io` and Everness. The
+exact time and court remain visible on the card for the visitor to choose on
+those sites. AIRPAD, Matchpoint, Padel First, and Plugin.ch keep their verified
+booking URLs because their public pages did not confirm a stable date-specific
+URL. Links open in a new tab. Availability meaning stays explicit:
 
 - **Disponible**: confirmed available in the latest successful snapshot.
 - **À vérifier**: the source returned an unknown slot state; it is not counted
