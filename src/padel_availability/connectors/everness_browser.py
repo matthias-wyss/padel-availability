@@ -466,6 +466,10 @@ class _EvernessLocator(Protocol):
 class _EvernessPage(Protocol):
     def goto(self, url: str, *, wait_until: str, timeout: int) -> object: ...
 
+    def set_default_timeout(self, timeout: int) -> None: ...
+
+    def set_default_navigation_timeout(self, timeout: int) -> None: ...
+
     def locator(self, selector: str) -> _EvernessLocator: ...
 
     def wait_for_timeout(self, timeout: int) -> None: ...
@@ -814,6 +818,8 @@ class EvernessBrowserConnector:
             try:
                 page = context.new_page()
                 try:
+                    page.set_default_timeout(self._timeout_ms)
+                    page.set_default_navigation_timeout(self._timeout_ms)
                     page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
                     _wait_for_everness_page(page, self._timeout_ms)
                     current_date = window_start

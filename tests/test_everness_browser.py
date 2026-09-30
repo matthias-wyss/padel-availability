@@ -688,6 +688,8 @@ class _FakeEvernessPage:
         self.closed = False
         self.wait_ticks = 0
         self.wait_until: str | None = None
+        self.default_timeout_ms: int | None = None
+        self.default_navigation_timeout_ms: int | None = None
 
     @property
     def payload(self) -> dict[str, object]:
@@ -697,6 +699,12 @@ class _FakeEvernessPage:
 
     def locator(self, selector: str) -> _FakeEvernessLocator:
         return _FakeEvernessLocator(self, selector)
+
+    def set_default_timeout(self, timeout: int) -> None:
+        self.default_timeout_ms = timeout
+
+    def set_default_navigation_timeout(self, timeout: int) -> None:
+        self.default_navigation_timeout_ms = timeout
 
     def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
         del timeout
@@ -976,7 +984,9 @@ def test_everness_connector_collects_grid_and_closes_context() -> None:
             )
         ]
     }
-    connector, page, context = _everness_connector(frame_dates, events, initial_date=requested)
+    connector, page, context = _everness_connector(
+        frame_dates, events, initial_date=requested, timeout_ms=7_500
+    )
 
     result = connector.collect(
         _everness_location(),
@@ -990,6 +1000,8 @@ def test_everness_connector_collects_grid_and_closes_context() -> None:
     assert result.run.status == "success"
     assert len(result.slots) == 2
     assert page.wait_until == "commit"
+    assert page.default_timeout_ms == 7_500
+    assert page.default_navigation_timeout_ms == 7_500
     assert page.closed and context.closed
     assert events.count("browser_enter") == 1
     assert events.count("browser_exit") == 1
