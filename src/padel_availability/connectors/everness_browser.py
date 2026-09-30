@@ -825,22 +825,19 @@ class EvernessBrowserConnector:
             context = browser.new_context()
             try:
                 page = context.new_page()
-                try:
-                    page.set_default_timeout(self._timeout_ms)
-                    page.set_default_navigation_timeout(self._timeout_ms)
-                    page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
-                    _wait_for_everness_page(page, self._timeout_ms)
-                    current_date = window_start
-                    while current_date < window_end:
-                        previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
-                        _select_everness_date(page, current_date, self._timeout_ms)
-                        payload = _wait_for_everness_date(
-                            page, current_date, previous_payload, self._timeout_ms
-                        )
-                        observations.extend(parse_everness_dom(payload, current_date))
-                        current_date += timedelta(days=1)
-                finally:
-                    page.close()
+                page.set_default_timeout(self._timeout_ms)
+                page.set_default_navigation_timeout(self._timeout_ms)
+                page.goto(source.booking_url, wait_until="commit", timeout=self._timeout_ms)
+                _wait_for_everness_page(page, self._timeout_ms)
+                current_date = window_start
+                while current_date < window_end:
+                    previous_payload = page.evaluate(_EVERNESS_VISIBLE_DOM_SCRIPT)
+                    _select_everness_date(page, current_date, self._timeout_ms)
+                    payload = _wait_for_everness_date(
+                        page, current_date, previous_payload, self._timeout_ms
+                    )
+                    observations.extend(parse_everness_dom(payload, current_date))
+                    current_date += timedelta(days=1)
             finally:
                 context.close()
         except (EvernessBrowserError, EvernessSourceError):

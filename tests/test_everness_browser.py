@@ -851,6 +851,7 @@ class _FakeEvernessContext:
         return self.page
 
     def close(self) -> None:
+        self.page.closed = True
         self.closed = True
         self.events.append("context_close")
 
@@ -1030,7 +1031,8 @@ def test_everness_connector_collects_grid_and_closes_context() -> None:
     assert events.count("browser_exit") == 1
     assert events.count("new_context") == 1
     assert events.count("new_page") == 1
-    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+    assert events[-2:] == ["context_close", "browser_exit"]
+    assert "page_close" not in events
     assert not any("terrainTxt" in event or "submit" in event.lower() for event in events)
 
 
@@ -1509,7 +1511,8 @@ def test_everness_programming_errors_propagate_and_cleanup() -> None:
     connector.close()
 
     assert page.closed and context.closed
-    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+    assert events[-2:] == ["context_close", "browser_exit"]
+    assert "page_close" not in events
 
 
 def test_everness_runtime_errors_propagate_and_cleanup() -> None:
@@ -1530,7 +1533,8 @@ def test_everness_runtime_errors_propagate_and_cleanup() -> None:
     connector.close()
 
     assert page.closed and context.closed
-    assert events[-3:] == ["page_close", "context_close", "browser_exit"]
+    assert events[-2:] == ["context_close", "browser_exit"]
+    assert "page_close" not in events
 
 
 def test_everness_connector_maps_normalization_error(monkeypatch: pytest.MonkeyPatch) -> None:
