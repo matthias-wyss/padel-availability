@@ -56,6 +56,13 @@ def test_plugin_grid_is_not_ready_while_slot_state_is_empty() -> None:
     assert not _plugin_grid_ready(payload)
 
 
+def test_plugin_grid_is_not_ready_while_slot_state_is_unrecognized() -> None:
+    payload = _payload()
+    payload["slots"][0]["state"] = "unrecognized"
+
+    assert not _plugin_grid_ready(payload)
+
+
 def test_plugin_grid_accepts_sparse_intervals_with_explicit_states() -> None:
     payload = _payload()
     payload["slots"] = [

@@ -440,6 +440,7 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
         return not slots
     if not slots:
         return False
+    valid_states = _AVAILABLE | _UNAVAILABLE | _AMBIGUOUS
     for slot in cast(list[object], slots):
         if not isinstance(slot, Mapping):
             return False
@@ -448,7 +449,7 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
         state = slot_dom.get("state")
         if not all(isinstance(value, str) for value in (start, end, court)):
             return False
-        if not isinstance(state, str) or not state.strip():
+        if not isinstance(state, str) or state.strip().casefold() not in valid_states:
             return False
     return True
 
