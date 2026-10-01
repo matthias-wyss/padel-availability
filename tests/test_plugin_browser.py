@@ -56,6 +56,66 @@ def test_plugin_grid_is_not_ready_while_slot_state_is_empty() -> None:
     assert not _plugin_grid_ready(payload)
 
 
+def test_plugin_grid_accepts_sparse_intervals_with_explicit_states() -> None:
+    payload = _payload()
+    payload["slots"] = [
+        {"court": "Court 1", "start": "09:00", "end": "09:30", "state": "available"},
+        {"court": "Court 2", "start": "09:00", "end": "11:00", "state": "unknown"},
+    ]
+
+    assert _plugin_grid_ready(payload)
+
+
+def test_visible_plugin_full_span_block_becomes_unknown_slots() -> None:
+    from playwright.sync_api import sync_playwright
+
+    times = (
+        "07:30",
+        "09:00",
+        "10:30",
+        "12:00",
+        "13:30",
+        "15:00",
+        "16:30",
+        "18:00",
+        "19:30",
+        "21:00",
+    )
+    rows = "".join(
+        f"<tr><th>{value}</th>"
+        + (
+            '<td class="terrainTxt time_extra notallowed tempnotallowed" '
+            'terrain="Padel 1" heure="07:30" rowspan="10" colspan="2">07:30</td>'
+            if index == 0
+            else ""
+        )
+        + "</tr>"
+        for index, value in enumerate(times)
+    )
+    html = f"""
+      <style>th,td {{ width: 120px; height: 24px; border: 1px solid; }}</style>
+      <div class="header_date">10 oct. 2026</div>
+      <select><option selected>Padel - 2026-2027</option></select>
+      <table class="reservation">
+        <thead><tr><th></th><th>Padel 1</th><th>Padel 2</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(html)
+        payload = page.evaluate(_PLUGIN_VISIBLE_DOM_SCRIPT)
+        browser.close()
+
+    assert payload["courts"] == ["Padel 1", "Padel 2"]
+    assert len(payload["slots"]) == 20
+    assert {slot["state"] for slot in payload["slots"]} == {"unknown"}
+    observations = parse_plugin_dom(payload, date(2026, 10, 10))
+    assert len(observations) == 20
+    assert {item.status for item in observations} == {"unknown"}
+
+
 class _FakePluginLocator:
     def __init__(self, page: _FakePluginPage, selector: str, index: int | None = None) -> None:
         self.page = page
@@ -468,14 +528,19 @@ def test_ambiguous_zurich_fallback_time_is_rejected() -> None:
         parse_plugin_dom(payload, date(2026, 10, 25))
 
 
-def test_partial_matrix_is_rejected_even_when_every_court_appears_elsewhere() -> None:
+def test_sparse_matrix_keeps_only_visible_slot_intervals() -> None:
     payload = _payload()
     payload["slots"].append(
         {"court": "Court 1", "start": "11:00", "end": "12:00", "state": "available"}
     )
 
-    with pytest.raises(PluginBrowserError, match="matrix"):
-        parse_plugin_dom(payload, REQUESTED_DATE)
+    observations = parse_plugin_dom(payload, REQUESTED_DATE)
+
+    assert [(slot.court_label, slot.starts_at, slot.ends_at) for slot in observations] == [
+        ("Court 1", "2026-09-26T09:00:00+02:00", "2026-09-26T10:30:00+02:00"),
+        ("Court 2", "2026-09-26T09:00:00+02:00", "2026-09-26T10:30:00+02:00"),
+        ("Court 1", "2026-09-26T11:00:00+02:00", "2026-09-26T12:00:00+02:00"),
+    ]
 
 
 CHANGE_CASES: tuple[tuple[Callable[[dict[str, Any]], object], str], ...] = (
@@ -486,7 +551,6 @@ CHANGE_CASES: tuple[tuple[Callable[[dict[str, Any]], object], str], ...] = (
     (lambda p: p.update(date="2026-09-27"), "date"),
     (lambda p: p.update(activity="Tennis"), "activity"),
     (lambda p: p.update(courts=[]), "court"),
-    (lambda p: p.update(slots=p["slots"][:1]), "court"),
     (lambda p: p["slots"].append(dict(p["slots"][0])), "duplicate"),
     (lambda p: p["slots"][0].update(start="9:00"), "time"),
     (lambda p: p["slots"][0].update(end="08:00"), "duration"),

@@ -95,8 +95,56 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
   const addCourt = name => {
     if (name && !/^(sa|di|lu|ma|me|je|ve)\s+\d+$/i.test(name) && !courts.includes(name)) courts.push(name);
   };
+  const reservationTables = Array.from(document.querySelectorAll('table.reservation')).filter(visible);
+  const expandedCells = new Set();
+  for (const table of reservationTables) {
+    const headings = Array.from(table.querySelectorAll('thead th')).filter(visible).slice(1)
+      .map(cell => (cell.innerText || '').trim());
+    for (const court of headings) addCourt(court);
+    const rows = Array.from(table.querySelectorAll('tbody tr')).filter(visible);
+    const terrainCells = Array.from(table.querySelectorAll('td.terrainTxt')).filter(visible);
+    if (!headings.length || !rows.length || terrainCells.length !== 1) continue;
+    const cell = terrainCells[0];
+    const rowSpan = Number(cell.getAttribute('rowspan') || 1);
+    const columnSpan = Number(cell.getAttribute('colspan') || 1);
+    const rowIndex = rows.indexOf(cell.closest('tr'));
+    const courtsCovered = headings.slice(cell.cellIndex - 1, cell.cellIndex - 1 + columnSpan);
+    const stateText = (cell.innerText || '').trim();
+    const state = visualStateOf(cell, stateText) || stateOf(stateText);
+    if (rowIndex !== 0 || rowSpan < rows.length || columnSpan < headings.length ||
+        courtsCovered.length !== headings.length || !['available', 'unavailable', 'unknown'].includes(state)) {
+      continue;
+    }
+    const rowMinutes = rows.map(row => {
+      const value = (row.querySelector('.hour_slot')?.innerText || row.querySelector('th')?.innerText || '').trim();
+      const match = value.match(/^(\d{2}):(\d{2})$/);
+      return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+    });
+    let expanded = false;
+    for (let offset = 0; offset < rowSpan; offset += 1) {
+      const index = rowIndex + offset;
+      const startMinutes = rowMinutes[index];
+      let endMinutes = rowMinutes[index + 1];
+      if (endMinutes === null || endMinutes === undefined) {
+        const previousMinutes = rowMinutes[index - 1];
+        // ponytail: repeat the prior visible interval to close a span that reaches the final row.
+        if (typeof startMinutes === 'number' && typeof previousMinutes === 'number') {
+          endMinutes = startMinutes + (startMinutes - previousMinutes);
+        }
+      }
+      if (typeof startMinutes !== 'number' || typeof endMinutes !== 'number' || endMinutes <= startMinutes) {
+        continue;
+      }
+      const start = `${String(Math.floor(startMinutes / 60)).padStart(2, '0')}:${String(startMinutes % 60).padStart(2, '0')}`;
+      const end = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
+      for (const court of courtsCovered) slots.push({court, start, end, state});
+      expanded = true;
+    }
+    if (expanded) expandedCells.add(cell);
+  }
   const cells = Array.from(document.querySelectorAll('td.terrainTxt')).filter(visible);
   for (const cell of cells) {
+    if (expandedCells.has(cell)) continue;
     const court = (cell.getAttribute('terrain') || '').trim();
     addCourt(court);
     const start = (cell.getAttribute('heure') || '').trim();
@@ -143,8 +191,7 @@ _PLUGIN_VISIBLE_DOM_SCRIPT = r"""
     const state = explicitState ? stateOf(explicitState) : '';
     if (court) slots.push({court, start:match[2], end:match[4], state});
   }
-  const table = Array.from(document.querySelectorAll('table.reservation'))
-    .filter(visible).find(candidate => !candidate.querySelector('td.terrainTxt'));
+  const table = reservationTables.find(candidate => !candidate.querySelector('td.terrainTxt'));
   if (table) {
     const headings = Array.from(table.querySelectorAll('thead th')).filter(visible).slice(1)
       .map(cell => (cell.innerText || '').trim());
@@ -393,7 +440,6 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
         return not slots
     if not slots:
         return False
-    intervals: dict[tuple[str, str], set[str]] = {}
     for slot in cast(list[object], slots):
         if not isinstance(slot, Mapping):
             return False
@@ -404,10 +450,7 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
             return False
         if not isinstance(state, str) or not state.strip():
             return False
-        intervals.setdefault((cast(str, start), cast(str, end)), set()).add(cast(str, court))
-    return bool(intervals) and all(
-        value == set(cast(list[str], court_labels)) for value in intervals.values()
-    )
+    return True
 
 
 def _wait_for_plugin_date(
@@ -673,7 +716,6 @@ def parse_plugin_dom(
 
     observations: list[BrowserSlotObservation] = []
     keys: set[tuple[str, str, str]] = set()
-    interval_courts: dict[tuple[str, str], set[str]] = {}
     for item in cast(list[object], raw_slots):
         slot = _mapping(item, "visible slot")
         if set(slot) != _SLOT_FIELDS:
@@ -699,11 +741,6 @@ def parse_plugin_dom(
         if key in keys:
             raise PluginBrowserError("visible slots contain duplicates")
         keys.add(key)
-        interval = (start_text, end_text)
-        courts_in_interval = interval_courts.setdefault(interval, set())
-        if court in courts_in_interval:
-            raise PluginBrowserError("visible slot matrix has a duplicate court interval")
-        courts_in_interval.add(court)
         raw_state = _text(slot["state"], "state").casefold()
         if raw_state in _AVAILABLE:
             status = "available"
@@ -722,6 +759,4 @@ def parse_plugin_dom(
                 status,
             )
         )
-    if any(courts_in_interval != set(courts) for courts_in_interval in interval_courts.values()):
-        raise PluginBrowserError("visible slot matrix is missing a court")
     return tuple(observations)
