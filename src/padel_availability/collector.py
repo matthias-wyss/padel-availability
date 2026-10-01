@@ -270,13 +270,28 @@ def collect_playtomic(
                 )
             else:
                 try:
-                    result = connector.collect(
-                        location,
-                        run_id=run_id,
-                        window_start=window_start,
-                        window_end=window_end,
-                        collected_at=collected_at,
-                    )
+                    try:
+                        result = connector.collect(
+                            location,
+                            run_id=run_id,
+                            window_start=window_start,
+                            window_end=window_end,
+                            collected_at=collected_at,
+                        )
+                    except PlaytomicSourceError as error:
+                        if (
+                            source is None
+                            or source.transport != "browser_dom"
+                            or str(error) != "browser navigation or extraction failed"
+                        ):
+                            raise
+                        result = connector.collect(
+                            location,
+                            run_id=run_id,
+                            window_start=window_start,
+                            window_end=window_end,
+                            collected_at=collected_at,
+                        )
                 except (
                     PlaytomicSourceError,
                     OSError,

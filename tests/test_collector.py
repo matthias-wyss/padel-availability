@@ -66,7 +66,10 @@ from padel_availability.connectors.playtomic import (
     PlaytomicSourceError,
     load_playtomic_sources,
 )
-from padel_availability.connectors.playtomic_browser import PlaytomicBrowserError
+from padel_availability.connectors.playtomic_browser import (
+    BrowserConnectorFactory,
+    PlaytomicBrowserError,
+)
 from padel_availability.connectors.plugin import (
     PLUGIN_LOCATION_IDS,
     PluginSource,
@@ -2082,6 +2085,64 @@ def test_collection_selects_browser_once_saves_immediately_and_continues(
         ]
         assert [outcome.slot_count for outcome in outcomes] == [0, 0, 3, 2, 3]
         assert len(list_availability_runs(connection)) == 5
+    finally:
+        connection.close()
+
+
+def test_browser_navigation_error_retries_once_for_public_browser_source(tmp_path: Path) -> None:
+    connection = ready_database(tmp_path)
+    location = next(
+        item for item in five_playtomic_locations() if item.location_id == "padel-parc-etoy"
+    )
+    source = next(
+        item for item in mixed_playtomic_sources() if item.location_id == "padel-parc-etoy"
+    )
+    collect_calls = 0
+
+    def browser_factory(_: Sequence[PlaytomicSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                nonlocal collect_calls
+                collect_calls += 1
+                if collect_calls == 1:
+                    raise PlaytomicSourceError("browser navigation or extraction failed")
+                return browser_result(
+                    received_location,
+                    source,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_playtomic(
+            connection,
+            (location,),
+            (source,),
+            location_id="padel-parc-etoy",
+            browser_connector_factory=cast(BrowserConnectorFactory, browser_factory),
+        )
+
+        assert collect_calls == 2
+        assert len(outcomes) == 1 and outcomes[0].status == "success"
+        assert len(list_availability_runs(connection, "padel-parc-etoy")) == 1
     finally:
         connection.close()
 
