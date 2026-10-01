@@ -775,7 +775,7 @@ def _airpad_connector(
     "requested_date,active_date_label",
     [
         (date(2026, 9, 24), "Thu\n24\nSep"),
-        (date(2026, 10, 1), "Thu\n1\nOct"),
+        (date(2026, 10, 1), "Thu\n01\nOct"),
         (date(2027, 1, 1), "Fri 1 Jan"),
     ],
 )

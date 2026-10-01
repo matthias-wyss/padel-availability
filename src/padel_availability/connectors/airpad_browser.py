@@ -502,13 +502,12 @@ def _airpad_active_date_matches(label: object, requested_date: date) -> bool:
     if not isinstance(label, str):
         return False
     parts = " ".join(label.split()).replace(",", "").split()
-    expected = (
-        _AIRPAD_WEEKDAYS[requested_date.weekday()],
-        str(requested_date.day),
-        _AIRPAD_MONTHS[requested_date.month - 1][:3],
-    )
-    return len(parts) == 3 and tuple(part.casefold() for part in parts) == tuple(
-        part.casefold() for part in expected
+    return (
+        len(parts) == 3
+        and parts[0].casefold() == _AIRPAD_WEEKDAYS[requested_date.weekday()].casefold()
+        and parts[1].isdigit()
+        and int(parts[1]) == requested_date.day
+        and parts[2].casefold() == _AIRPAD_MONTHS[requested_date.month - 1][:3].casefold()
     )
 
 
