@@ -399,7 +399,10 @@ def _plugin_grid_ready(dom: Mapping[str, object]) -> bool:
             return False
         slot_dom = cast(Mapping[str, object], slot)
         start, end, court = slot_dom.get("start"), slot_dom.get("end"), slot_dom.get("court")
+        state = slot_dom.get("state")
         if not all(isinstance(value, str) for value in (start, end, court)):
+            return False
+        if not isinstance(state, str) or not state.strip():
             return False
         intervals.setdefault((cast(str, start), cast(str, end)), set()).add(cast(str, court))
     return bool(intervals) and all(

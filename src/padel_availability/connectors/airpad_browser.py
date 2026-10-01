@@ -437,7 +437,7 @@ def _airpad_frame(page: _AirpadPage, timeout_ms: int) -> _AirpadFrame:
 
 
 def _airpad_date_label(requested_date: date) -> str:
-    return f"{_AIRPAD_MONTHS[requested_date.month - 1]} {requested_date.day}, {requested_date.year}"
+    return f"{_AIRPAD_MONTHS[requested_date.month - 1]} {requested_date.day:02d}, {requested_date.year}"
 
 
 def _wait_for_airpad_date(

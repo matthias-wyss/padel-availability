@@ -522,7 +522,14 @@ class _FakeAirpadFrame:
         elif selector in {".btn-date-calendar", ".select-time-range"}:
             values = [""] if self.wait_ticks >= self.control_delay else []
         elif selector.startswith("button.days-btn"):
-            values = [""]
+            label = selector.split('aria-label="', 1)[1].split('"', 1)[0]
+            return int(
+                label
+                in {
+                    f"{requested:%B} {requested.day:02d}, {requested.year}"
+                    for requested in self.dates
+                }
+            )
         elif selector == ".btn-arrow-right":
             values = (
                 [""]
@@ -768,6 +775,7 @@ def _airpad_connector(
     "requested_date,active_date_label",
     [
         (date(2026, 9, 24), "Thu\n24\nSep"),
+        (date(2026, 10, 1), "Thu\n1\nOct"),
         (date(2027, 1, 1), "Fri 1 Jan"),
     ],
 )

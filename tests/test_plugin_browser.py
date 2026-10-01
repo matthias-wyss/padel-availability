@@ -14,6 +14,7 @@ from padel_availability.connectors.plugin_browser import (
     _PLUGIN_VISIBLE_DOM_SCRIPT,  # pyright: ignore[reportPrivateUsage]
     PluginBrowserConnector,
     PluginBrowserError,
+    _plugin_grid_ready,  # pyright: ignore[reportPrivateUsage]
     parse_plugin_dom,
 )
 from padel_availability.inventory import load_locations
@@ -46,6 +47,13 @@ def _payload() -> dict[str, Any]:
         "authentication_visible": False,
         "empty_grid": False,
     }
+
+
+def test_plugin_grid_is_not_ready_while_slot_state_is_empty() -> None:
+    payload = _payload()
+    payload["slots"][0]["state"] = ""
+
+    assert not _plugin_grid_ready(payload)
 
 
 class _FakePluginLocator:
