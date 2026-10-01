@@ -2,7 +2,8 @@
 
 ## Status
 
-Design and written spec approved by the user, 2026-09-30.
+Design and written spec approved by the user, 2026-09-30. Past-slot and
+duration-filter addendum approved 2026-10-01.
 
 ## Goal
 
@@ -37,6 +38,18 @@ Minimal Swiss; v1 keeps the date/coverage/club filters and chronological list.
   count of distinct physical courts.
 - Keep **À vérifier** and **Données anciennes** in their existing separate
   sections, grouped by the same exact-window rule.
+
+## Past slots and duration filters
+
+- Hide any slot whose exact start instant is at or before the browser's current
+  time, in the available, unknown, and stale sections. A slot already in
+  progress is no longer bookable and is hidden too.
+- Apply this time check and the duration selection to individual rows before
+  grouping so result cards and counts stay consistent. Remove an expiring card
+  from an open page at its start time.
+- Offer cumulative native duration checkboxes for the unique positive minute
+  lengths in the loaded snapshots. All observed durations start selected;
+  filtering by duration changes only the view, not snapshots or the API.
 
 ## Booking links
 
@@ -108,6 +121,10 @@ dependencies.
 - Filters are applied before grouping; the summary reports grouped windows and
   court-time opportunities, not raw duplicate cards or distinct physical court
   assets.
+- Past-start slots are hidden from every result state, including after their
+  start passes while the page is open.
+- Duration choices are derived from loaded data, can be combined, and filter
+  cards and summary counts before grouping.
 - Playtomic `.com` opens the selected Europe/Zurich day with a correct `date`
   parameter; each other platform uses a date URL only after public validation.
 - Unsupported direct-date routes retain the current booking URL without guessed

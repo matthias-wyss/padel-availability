@@ -209,6 +209,8 @@ def test_evening_search_keeps_statuses_and_local_club_selection(
     browser_page: Page, web_server: str
 ) -> None:
     today = datetime.now(LOCAL_TZ).date()
+    fixed_now = int(datetime.combine(today, time(14, 0), tzinfo=LOCAL_TZ).timestamp() * 1000)
+    browser_page.add_init_script(f"Date.now = () => {fixed_now}")
     fixture = _availability(today)
     refresh_status: dict[str, object] = {
         "job_id": None,
@@ -370,8 +372,117 @@ def test_evening_search_keeps_statuses_and_local_club_selection(
         assert browser_page.evaluate("document.documentElement.scrollWidth === window.innerWidth")
 
 
+def test_past_and_duration_filters_apply_before_grouping(
+    browser_page: Page, web_server: str
+) -> None:
+    today = datetime.now(LOCAL_TZ).date()
+    fixed_now = int(datetime.combine(today, time(14, 0), tzinfo=LOCAL_TZ).timestamp() * 1000)
+    browser_page.add_init_script(f"Date.now = () => {fixed_now}")
+    fixture = _availability(today)
+    locations = cast(dict[str, dict[str, object]], fixture["locations"])
+    for location in locations.values():
+        location["slots"] = []
+
+    def slot(start: time, end: time, court: str, status: str) -> dict[str, object]:
+        return {
+            "court_label": court,
+            "starts_at": _utc(today, start.hour, start.minute),
+            "ends_at": _utc(today, end.hour, end.minute),
+            "status": status,
+        }
+
+    locations["collonge-bellerive"]["slots"] = [
+        slot(time(13), time(13, 30), "Déjà passé", "available"),
+        slot(time(13, 30), time(14, 30), "Déjà commencé", "available"),
+        slot(time(14), time(14, 30), "Commence maintenant", "available"),
+        slot(time(15), time(15, 30), "30 minutes", "available"),
+        slot(time(16), time(17), "Une heure", "available"),
+        slot(time(17), time(18, 30), "Une heure trente", "available"),
+        slot(time(19), time(21), "Deux heures", "available"),
+    ]
+    locations["cologny"]["slots"] = [slot(time(12), time(13), "À vérifier", "unknown")]
+    locations["csu-champel"]["slots"] = [slot(time(12, 30), time(14), "Ancien", "available")]
+
+    browser_page.route(
+        "**/api/availability",
+        lambda route: route.fulfill(status=200, json=fixture),
+    )
+    browser_page.route(
+        "**/api/refresh/status",
+        lambda route: route.fulfill(
+            status=200,
+            json={"status": "idle", "next_allowed_at": None, "next_scheduled_at": None},
+        ),
+    )
+    browser_page.goto(web_server)
+    browser_page.locator("#filter-panel summary").click()
+    browser_page.locator("#duration-options input").first.wait_for()
+
+    available = browser_page.locator("#available-results .slot-card")
+    duration_options = browser_page.locator("#duration-options")
+    duration_inputs = duration_options.locator("input[name=duration]")
+    assert [
+        duration_inputs.nth(index).get_attribute("value")
+        for index in range(duration_inputs.count())
+    ] == ["30", "60", "90", "120"]
+    assert all(duration_inputs.nth(index).is_checked() for index in range(duration_inputs.count()))
+    assert available.count() == 4
+    assert available.get_by_text("Commence maintenant").count() == 0
+    assert browser_page.locator("#unknown-results .slot-card").count() == 0
+    assert browser_page.locator("#stale-results .slot-card").count() == 0
+
+    duration_options.locator("input[value='60']").uncheck()
+    duration_options.locator("input[value='90']").uncheck()
+    duration_options.locator("input[value='120']").uncheck()
+    assert available.count() == 1
+    assert browser_page.locator("#available-count").inner_text() == "1"
+    assert available.get_by_text("30 min", exact=True).is_visible()
+
+    duration_options.locator("input[value='60']").check()
+    assert available.count() == 2
+    assert browser_page.locator("#result-summary").get_by_text("2 créneaux").is_visible()
+
+
+def test_slot_disappears_when_its_start_time_passes(browser_page: Page, web_server: str) -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    today = now.astimezone(LOCAL_TZ).date()
+    starts_at = now + timedelta(seconds=5)
+    fixture = _availability(today)
+    locations = cast(dict[str, dict[str, object]], fixture["locations"])
+    for location in locations.values():
+        location["slots"] = []
+    locations["collonge-bellerive"]["slots"] = [
+        {
+            "court_label": "Bientôt expiré",
+            "starts_at": starts_at.isoformat().replace("+00:00", "Z"),
+            "ends_at": (starts_at + timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
+            "status": "available",
+        }
+    ]
+    browser_page.route(
+        "**/api/availability",
+        lambda route: route.fulfill(status=200, json=fixture),
+    )
+    browser_page.route(
+        "**/api/refresh/status",
+        lambda route: route.fulfill(
+            status=200,
+            json={"status": "idle", "next_allowed_at": None, "next_scheduled_at": None},
+        ),
+    )
+    browser_page.goto(web_server)
+
+    browser_page.get_by_text("Bientôt expiré").wait_for()
+    browser_page.wait_for_function(
+        "document.querySelectorAll('#available-results .slot-card').length === 0",
+        timeout=10_000,
+    )
+
+
 def test_booking_links_open_the_verified_local_date(browser_page: Page, web_server: str) -> None:
     today = datetime.now(LOCAL_TZ).date()
+    fixed_now = int(datetime.combine(today, time(0), tzinfo=LOCAL_TZ).timestamp() * 1000)
+    browser_page.add_init_script(f"Date.now = () => {fixed_now}")
     urls = {
         "padel-station": "https://playtomic.com/fr/clubs/padel-station1",
         "vaudoise-arena": (

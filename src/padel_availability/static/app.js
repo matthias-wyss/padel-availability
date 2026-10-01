@@ -26,6 +26,7 @@
   const dateTo = document.querySelector("#date-to");
   const timeFrom = document.querySelector("#time-from");
   const timeTo = document.querySelector("#time-to");
+  const durationOptions = document.querySelector("#duration-options");
   const clubList = document.querySelector("#club-list");
   const clubSearch = document.querySelector("#club-search");
   const refreshButton = document.querySelector("#refresh-button");
@@ -36,6 +37,7 @@
   let availabilityGeneratedAt = 0;
   let reloadedRefreshJobId = null;
   let refreshTimer;
+  let pastSlotTimer = null;
 
   function localDate(value) {
     const parts = Object.fromEntries(
@@ -139,7 +141,44 @@
     return selected.has("other");
   }
 
-  function matchesFilters(slot) {
+  function slotDurationMinutes(slot) {
+    return Math.max(0, Math.round((Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60000));
+  }
+
+  function durationLabel(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    if (!hours) return `${minutes} min`;
+    return remainder ? `${hours} h ${remainder}` : `${hours} h`;
+  }
+
+  function renderDurationFilters() {
+    const durations = new Set();
+    for (const location of locations) {
+      for (const slot of location.slots || []) {
+        if (slot.status === "unavailable") continue;
+        const duration = slotDurationMinutes(slot);
+        if (duration > 0) durations.add(duration);
+      }
+    }
+    durationOptions.replaceChildren();
+    for (const duration of [...durations].sort((a, b) => a - b)) {
+      const label = document.createElement("label");
+      label.className = "check-row";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "duration";
+      checkbox.value = String(duration);
+      checkbox.checked = true;
+      label.append(checkbox, document.createTextNode(durationLabel(duration)));
+      durationOptions.append(label);
+    }
+    document.querySelector("#duration-filter-set").hidden = durations.size === 0;
+  }
+
+  function matchesFilters(slot, now, selectedDurations, filterByDuration) {
+    const startTimestamp = Date.parse(slot.starts_at);
+    if (!Number.isFinite(startTimestamp) || startTimestamp <= now) return false;
     const day = localDate(slot.starts_at);
     if (dateFrom.value && day < dateFrom.value) return false;
     if (dateTo.value && day > dateTo.value) return false;
@@ -147,6 +186,7 @@
       const start = formatTime(slot.starts_at);
       if (start < timeFrom.value || start >= timeTo.value) return false;
     }
+    if (filterByDuration && !selectedDurations.has(slotDurationMinutes(slot))) return false;
     return true;
   }
 
@@ -188,7 +228,7 @@
     end.textContent = formatTime(slot.ends_at);
     time.append(start, separator, end);
 
-    const duration = Math.max(0, Math.round((Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60000));
+    const duration = slotDurationMinutes(slot);
     const durationText = document.createElement("span");
     durationText.className = "slot-duration";
     durationText.textContent = `${duration} min`;
@@ -316,6 +356,13 @@
     const unknownRows = [];
     const staleRows = [];
     const states = [];
+    const now = Date.now();
+    const durationInputs = [...durationOptions.querySelectorAll('input[name="duration"]')];
+    const selectedDurations = new Set(
+      durationInputs.filter((input) => input.checked).map((input) => Number(input.value)),
+    );
+    const filterByDuration = durationInputs.length > 0;
+    let nextVisibleStart = Number.POSITIVE_INFINITY;
     const endDate = dateTo.value || dateFrom.value;
 
     for (const location of locations) {
@@ -329,7 +376,13 @@
         continue;
       }
 
-      const matches = (location.slots || []).filter(matchesFilters);
+      const matches = (location.slots || []).filter((slot) => {
+        const matches = matchesFilters(slot, now, selectedDurations, filterByDuration);
+        if (matches && slot.status !== "unavailable") {
+          nextVisibleStart = Math.min(nextVisibleStart, Date.parse(slot.starts_at));
+        }
+        return matches;
+      });
       for (const slot of matches) {
         if (slot.status === "unavailable") continue;
         if (location.snapshot_status === "stale") staleRows.push({ location, slot });
@@ -385,6 +438,16 @@
     document.querySelector("#result-summary").textContent = unidentifiedPossibilities
       ? `${summary} · ${unidentifiedPossibilities} possibilités non identifiées`
       : summary;
+    if (pastSlotTimer !== null) window.clearTimeout(pastSlotTimer);
+    pastSlotTimer = Number.isFinite(nextVisibleStart)
+      ? window.setTimeout(
+          () => {
+            pastSlotTimer = null;
+            renderAvailability();
+          },
+          Math.max(0, nextVisibleStart - Date.now() + 1),
+        )
+      : null;
   }
 
   function renderClubCount() {
@@ -463,6 +526,7 @@
       const payload = await response.json();
       availabilityGeneratedAt = Date.parse(payload.generated_at) || availabilityGeneratedAt;
       locations = Object.values(payload.locations || {});
+      renderDurationFilters();
       const ids = locations.map((location) => location.location_id);
       selectedLocationIds = savedIds(ids);
       dateFrom.value = today();
@@ -523,6 +587,7 @@
   for (const input of [dateFrom, dateTo, timeFrom, timeTo]) {
     input.addEventListener("change", renderAvailability);
   }
+  durationOptions.addEventListener("change", renderAvailability);
   document.querySelectorAll("input[name=cover]").forEach((input) => {
     input.addEventListener("change", renderAvailability);
   });

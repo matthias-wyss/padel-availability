@@ -58,7 +58,10 @@ Use a `.json` output path for a machine-readable report.
 ## Public Web App
 
 The app defaults to today through the next 14 days. Set a date range, an
-optional start/end time range, indoor/outdoor coverage, and clubs. With no time
+optional start/end time range, durations, indoor/outdoor coverage, and clubs.
+Slots disappear when their start time passes, including when the page remains
+open. Duration checkboxes are cumulative, default to all durations present in
+the loaded snapshots, and update the grouped results and summary. With no time
 range, it shows all times; **Ce soir** selects today from 18:00 to 22:00. The
 club checklist starts with all 23 configured locations selected and stores later
 choices only in that browser's local storage.
