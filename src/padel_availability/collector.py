@@ -54,6 +54,7 @@ from .connectors.plugin import (
 from .connectors.plugin_browser import (
     PluginBrowserConnector,
     PluginBrowserConnectorFactory,
+    PluginBrowserError,
 )
 from .database import save_availability_result
 from .models import LocationRecord
@@ -931,13 +932,24 @@ def collect_plugin(
                 )
             else:
                 try:
-                    result = browser_connector.collect(
-                        location,
-                        run_id=run_id,
-                        window_start=window_start,
-                        window_end=window_end,
-                        collected_at=collected_at,
-                    )
+                    try:
+                        result = browser_connector.collect(
+                            location,
+                            run_id=run_id,
+                            window_start=window_start,
+                            window_end=window_end,
+                            collected_at=collected_at,
+                        )
+                    except PluginBrowserError as error:
+                        if str(error) != "timed out waiting for the requested Plugin date":
+                            raise
+                        result = browser_connector.collect(
+                            location,
+                            run_id=run_id,
+                            window_start=window_start,
+                            window_end=window_end,
+                            collected_at=collected_at,
+                        )
                 except (PluginSourceError, OSError, TimeoutError, json.JSONDecodeError) as error:
                     result = _plugin_error_result(
                         location,

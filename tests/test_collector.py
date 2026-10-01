@@ -1543,6 +1543,60 @@ def test_plugin_collection_selects_one_location_and_validates_catalog_ids(
         connection.close()
 
 
+def test_plugin_date_timeout_retries_the_location_once(tmp_path: Path) -> None:
+    connection = ready_plugin_database(tmp_path)
+    location = next(item for item in plugin_locations() if item.location_id == "gland")
+    source = next(item for item in plugin_sources() if item.location_id == "gland")
+    collect_calls = 0
+
+    def browser_factory(_: Sequence[PluginSource]):
+        class FakeBrowserConnector:
+            def open(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+            def collect(
+                self,
+                received_location: LocationRecord,
+                *,
+                run_id: str,
+                window_start: date,
+                window_end: date,
+                collected_at: str,
+            ) -> AvailabilityResult:
+                nonlocal collect_calls
+                collect_calls += 1
+                if collect_calls == 1:
+                    raise PluginBrowserError("timed out waiting for the requested Plugin date")
+                return _plugin_result(
+                    received_location,
+                    source,
+                    run_id=run_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    collected_at=collected_at,
+                )
+
+        return FakeBrowserConnector()
+
+    try:
+        outcomes = collect_plugin(
+            connection,
+            (location,),
+            (source,),
+            location_id="gland",
+            browser_connector_factory=cast(PluginBrowserConnectorFactory, browser_factory),
+        )
+
+        assert collect_calls == 2
+        assert len(outcomes) == 1 and outcomes[0].status == "success"
+        assert len(list_availability_runs(connection, "gland")) == 1
+    finally:
+        connection.close()
+
+
 def test_plugin_startup_error_is_bounded_persisted_for_all_and_closes(
     tmp_path: Path,
 ) -> None:
