@@ -110,7 +110,7 @@ Expected: PASS at 1440px and 375px.
 
 **Interfaces:**
 - Consumes: the existing `browser_page` and `web_server` fixtures.
-- Produces: an 8px minimum inset between the first fieldset's top border and its legend text.
+- Produces: a 16px minimum legend inset, at most 24px between the legend and “Du”, and no downward shift of the “Du” label.
 
 - [x] **Step 1: Add the failing browser assertion**
 
@@ -127,31 +127,42 @@ def test_filter_legend_has_inset_from_fieldset_border(
             "window.matchMedia('(max-width: 767px)').matches === (width <= 767)",
             arg=width,
         )
-        inset = browser_page.locator(".filter-content fieldset").first.evaluate(
+        spacing = browser_page.locator(".filter-content fieldset").first.evaluate(
             """fieldset => {
                 const legend = fieldset.querySelector("legend");
                 const range = document.createRange();
                 range.selectNodeContents(legend);
-                const textTop = range.getBoundingClientRect().top;
-                const fieldsetTop = fieldset.getBoundingClientRect().top;
+                const text = range.getBoundingClientRect();
+                const fieldsetRect = fieldset.getBoundingClientRect();
+                const dateLabel = fieldset.querySelector("label[for='date-from']").getBoundingClientRect();
                 const border = parseFloat(getComputedStyle(fieldset).borderTopWidth);
-                return textTop - fieldsetTop - border;
+                return {
+                    inset: text.top - fieldsetRect.top - border,
+                    labelGap: dateLabel.top - text.bottom,
+                    labelOffset: dateLabel.top - fieldsetRect.top,
+                };
             }"""
         )
-        assert inset >= 8
+        assert spacing["inset"] >= 16
+        assert spacing["labelGap"] <= 24
+        assert spacing["labelOffset"] <= 58
 ```
 
 - [x] **Step 2: Run the test and confirm it fails on the current legend**
 
 Run: `PYTHONPATH=src uv run pytest tests/test_web_ui.py::test_filter_legend_has_inset_from_fieldset_border -q`
 
-Expected: FAIL; the current legend text is only 0.5px below the border.
+Expected: FAIL; current spacing is about 8.5px from the border and leaves about 30.5px before the "Du" label.
 
-- [x] **Step 3: Add top padding to the legend**
+- [x] **Step 3: Rebalance fieldset and legend top padding**
 
 ```css
+fieldset {
+  padding: 9px 0 17px;
+}
+
 legend {
-  padding: 8px 0 0;
+  padding: 16px 0 0;
 }
 ```
 

@@ -250,18 +250,25 @@ def test_filter_legend_has_inset_from_fieldset_border(browser_page: Page, web_se
             "window.matchMedia('(max-width: 767px)').matches === (width <= 767)",
             arg=width,
         )
-        inset = browser_page.locator(".filter-content fieldset").first.evaluate(
+        spacing = browser_page.locator(".filter-content fieldset").first.evaluate(
             """fieldset => {
                 const legend = fieldset.querySelector("legend");
                 const range = document.createRange();
                 range.selectNodeContents(legend);
-                const textTop = range.getBoundingClientRect().top;
-                const fieldsetTop = fieldset.getBoundingClientRect().top;
+                const text = range.getBoundingClientRect();
+                const fieldsetRect = fieldset.getBoundingClientRect();
+                const dateLabel = fieldset.querySelector("label[for='date-from']").getBoundingClientRect();
                 const border = parseFloat(getComputedStyle(fieldset).borderTopWidth);
-                return textTop - fieldsetTop - border;
+                return {
+                    inset: text.top - fieldsetRect.top - border,
+                    labelGap: dateLabel.top - text.bottom,
+                    labelOffset: dateLabel.top - fieldsetRect.top,
+                };
             }"""
         )
-        assert inset >= 8
+        assert spacing["inset"] >= 16
+        assert spacing["labelGap"] <= 24
+        assert spacing["labelOffset"] <= 58
 
 
 def test_evening_search_keeps_statuses_and_local_club_selection(

@@ -223,7 +223,7 @@ h1 span {
 fieldset {
   min-width: 0;
   margin: 0;
-  padding: 17px 0;
+  padding: 9px 0 17px;
   border: 0;
   border-top: 1px solid var(--line);
 }
@@ -233,7 +233,7 @@ legend {
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0 0;
+  padding: 16px 0 0;
   font-size: 14px;
   font-weight: 750;
 }

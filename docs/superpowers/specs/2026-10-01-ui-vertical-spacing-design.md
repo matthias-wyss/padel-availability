@@ -15,12 +15,12 @@ Improve the vertical rhythm around the page introduction and availability result
   - `.intro` bottom margin: 38px to 32px on desktop, and 25px to 20px on mobile.
   - `.results-heading` bottom margin: 23px to 16px.
   - `.result-section` bottom margin: 30px to 24px.
-  - `legend` top padding: 0 to 8px so the legend text clears the native fieldset border.
-- Leave fieldset padding, input spacing, and 44px control targets unchanged so forms do not become cramped.
+  - Fieldset top padding: 17px to 9px, and `legend` top padding: 8px to 16px. This increases the border-to-heading inset while preserving the first field label's vertical position.
+- Leave input spacing and 44px control targets unchanged so forms do not become cramped.
 
 ## Validation
 
 - Add a browser assertion for the maximum intended intro-to-search vertical gap at desktop and mobile widths.
-- Add a browser assertion that legend text sits at least 8px below its fieldset top border at desktop and mobile widths.
+- Add a browser assertion that legend text sits at least 16px below its fieldset top border, the first date label stays within 58px of the border, and the gap to that label is at most 24px at desktop and mobile widths.
 - Run the web UI test and the repository's required test, Ruff, formatting, and Pyright checks.
 - Preserve the existing no-horizontal-overflow checks at 375, 768, 1024, and 1440 pixels.
