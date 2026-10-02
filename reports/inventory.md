@@ -1,11 +1,11 @@
 # Padel Availability Inventory
 
 ## Summary
-- Verification run: inventory-2026-09-26
-- Started (UTC): 2026-09-21T00:00:00Z
-- Ended (UTC): 2026-09-21T00:00:00Z
+- Verification run: inventory-2026-10-02
+- Started (UTC): 2026-10-02T00:00:00Z
+- Ended (UTC): 2026-10-02T00:00:00Z
 - Candidates: 29
-- Locations: 29
+- Locations: 28
 - Errors: 0
 - Summary: ok
 
@@ -21,12 +21,12 @@
 - Location de raquettes: Oui
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: Inconnu
+- Couverture: outdoor
+- Courts: outdoor courts (3)
 - Adresse: Ch des Champs-Blancs 70B, 1279 Chavannes-de-Bogis
 - Site officiel: [https://everness.ch/fr/padel/](<https://everness.ch/fr/padel/>)
 - Réservation: [https://padel.everness.ch/](<https://padel.everness.ch/>)
-- Notes: The official page supports the venue address, online-only booking, and free racket rental. It does not state court count, cover, locker rooms, membership, account requirement, or booking platform; those fields are unknown.
+- Notes: The official page supports the venue address, online-only booking, and free racket rental. PadelCompass \(updated 9 August 2026\) lists three outdoor doubles courts, consistent with the operator's 2023 outdoor-court announcement. Court cover is recorded as outdoor with probable confidence; locker rooms, membership, and account requirement remain unknown.
 
 ### Padel Station \(Chêne-Bourg\)
 - Location ID: padel-station
@@ -92,12 +92,12 @@
 - Location de raquettes: Inconnu
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: courts (2)
+- Couverture: outdoor
+- Courts: outdoor courts (2)
 - Adresse: Rue Boissonnas 11, 1227 Genève
 - Site officiel: [https://www.airpad.ch/airpad](<https://www.airpad.ch/airpad>)
 - Réservation: [https://www.airpad.ch/reserve](<https://www.airpad.ch/reserve>)
-- Notes: The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.
+- Notes: The AIRPAD public reservation card labels court 3 at Les Acacias 'Extérieur'; this site-specific booking label supports outdoor classification over the operator page's generic indoor heading. Access restrictions, rentals, lockers, and account requirements remain unknown.
 
 ### L'Asphalte / Pointe de la Jonction \(Genève\)
 - Location ID: asphalte-jonction
@@ -109,13 +109,13 @@
 - Location de raquettes: Inconnu
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: seasonal
+- Couverture: partially\_covered
 - Courts: covered seasonal courts (2)
 - Adresse: Sentier des Saules 19, 1205 Genève
 - Site officiel: [https://www.geneve.ch/asphalte](<https://www.geneve.ch/asphalte>)
 - Réservation: [https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=9>)
 - Plateforme: Padel Connect
-- Notes: The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.
+- Notes: The current City page confirms two covered padel courts under halls 2 and 3, with seasonal operation from 5 June to 25 October in 2026. Coverage is recorded as partially covered; seasonal operation is preserved here. The regional directory supplies a street address, and the public Padel Connect grid is directly available at the verified Matchpoint URL.
 
 ### GVA Padel / Palexpo \(Grand-Saconnex\)
 - Location ID: gva-palexpo
@@ -145,12 +145,12 @@
 - Location de raquettes: Inconnu
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: courts (3)
+- Couverture: indoor
+- Courts: indoor courts (3)
 - Adresse: Route des Jeunes 28, 1212 Grand-Lancy
 - Site officiel: [https://www.airpad.ch/airpad](<https://www.airpad.ch/airpad>)
 - Réservation: [https://www.airpad.ch/reserve](<https://www.airpad.ch/reserve>)
-- Notes: The current operator page says La Praille has three terrains. The raw candidate file supplied two; that historical candidate value is preserved in data/candidates.json and is superseded by the current official count. Cover, access restrictions, rentals, lockers, and account requirements are unknown.
+- Notes: The current operator page says La Praille has three terrains and describes AIRPAD's courts as indoor; the user confirms La Praille is indoor. The raw candidate file supplied two; that historical candidate value is preserved in data/candidates.json and is superseded by the current official count. Access restrictions, rentals, lockers, and account requirements are unknown.
 
 ### AIRPAD Meyrin \(Meyrin\)
 - Location ID: airpad-meyrin
@@ -162,12 +162,12 @@
 - Location de raquettes: Inconnu
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: court (1)
+- Couverture: outdoor
+- Courts: outdoor court (1)
 - Adresse: Route du Nant-d'Avril 150, 1217 Meyrin
 - Site officiel: [https://www.airpad.ch/airpad](<https://www.airpad.ch/airpad>)
 - Réservation: [https://www.airpad.ch/reserve](<https://www.airpad.ch/reserve>)
-- Notes: The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.
+- Notes: The user reports that the AIRPAD reservation card for Meyrin labels its court 'Extérieur'. The operator's general page uses an indoor heading without distinguishing locations; the site-specific label is retained with probable confidence. Access restrictions, rentals, lockers, and account requirements remain unknown.
 
 ### Centre sportif de Maisonnex \(Meyrin\)
 - Location ID: maisonnex
@@ -179,11 +179,11 @@
 - Location de raquettes: Inconnu
 - Vestiaires: Inconnu
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: Inconnu
+- Couverture: partially\_covered
+- Courts: covered courts (3)
 - Réservation: [https://shop.bookinea.app/fr/meyrin-sports](<https://shop.bookinea.app/fr/meyrin-sports>)
 - Plateforme: Bookinea
-- Notes: The former Meyrin commune URL returned 404 and is removed. The live Bookinea portal confirms a current Maisonnex-related padel reservation route, Padel 90 minutes at CHF 60.00, a CHF 15.00 guest padel ticket, and conditional guest access, but does not state the court count, address, cover, rentals, or locker-room facts. The record is therefore probable.
+- Notes: The Commune of Meyrin confirms three covered courts at Maisonnex, opened on 1 April 2026, and says they are usable year-round without rain exposure. The live Bookinea portal supports the reservation, price, and conditional guest-access facts; rentals and locker-room details remain unknown. The record is therefore probable.
 
 ### Padel des Evaux \(Onex\)
 - Location ID: evaux
@@ -205,24 +205,7 @@
 
 ### AIRPAD Plan-les-Ouates \(Plan-les-Ouates\)
 - Location ID: airpad-plan-les-ouates
-- Candidate IDs: airpad-plan-les-ouates
-- Statut: confirmed
-- Accès: Inconnu
-- Adhésion requise: Inconnu
-- Réservation publique: Inconnu
-- Location de raquettes: Inconnu
-- Vestiaires: Inconnu
-- Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: courts (2)
-- Adresse: Chemin du Pont-du-Centenaire 78, 1228 Plan-les-Ouates
-- Site officiel: [https://www.airpad.ch/airpad](<https://www.airpad.ch/airpad>)
-- Réservation: [https://www.airpad.ch/reserve](<https://www.airpad.ch/reserve>)
-- Notes: The operator confirms this as a separate AIRPAD site. Cover, access restrictions, rentals, lockers, and account requirements are unknown.
-
-### Centre sportif des Cherpines \(Plan-les-Ouates\)
-- Location ID: cherpines
-- Candidate IDs: cherpines
+- Candidate IDs: airpad-plan-les-ouates, cherpines
 - Statut: confirmed
 - Accès: public
 - Adhésion requise: Inconnu
@@ -230,12 +213,13 @@
 - Location de raquettes: Oui
 - Vestiaires: Oui
 - Compte requis: Inconnu
-- Couverture: Inconnu
-- Courts: padel courts (2)
-- Site officiel: [https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>)
+- Couverture: partially\_covered
+- Courts: covered courts (2)
+- Adresse: Chemin du Pont-du-Centenaire 78, 1228 Plan-les-Ouates
+- Site officiel: [https://www.airpad.ch/airpad](<https://www.airpad.ch/airpad>)
 - Réservation: [https://www.airpad.ch/reserve](<https://www.airpad.ch/reserve>)
 - Plateforme: AIRPAD
-- Notes: The commune supports the court count, public access, reservation, equipment rental, and locker-room information. The page does not provide a street address, cover classification, membership rule, or account requirement.
+- Notes: AIRPAD lists this site at Chemin du Pont-du-Centenaire 78; the commune identifies its two covered courts as the Centre sportif des Cherpines and links AIRPAD booking. The two source candidates are merged into one location. Public access, racket-rental boxes, and limited locker-room hours are confirmed; membership and account requirements are unknown.
 
 ### Vaudoise aréna \(Prilly\)
 - Location ID: vaudoise-arena
@@ -503,17 +487,18 @@
 - Couverture: Inconnu
 - Courts: indoor courts (2), outdoor courts (2)
 - Adresse: Chemin des Epinettes 1, 1032 Romanel-sur-Lausanne
-- Notes: Only regional directory address, court grouping, and cover facts are retained. The official page was not successfully fetched in this pass; access and booking are unknown.
+- Site officiel: [https://green-club.ch/squash-padel-bad/padel](<https://green-club.ch/squash-padel-bad/padel>)
+- Notes: The official page confirms four courts but shows a covered-courts pictogram without detailing how many are indoor versus outdoor. Padelhike lists two indoor and two outdoor doubles courts. Keep overall cover unknown until the club's split can be confirmed; access and booking are also unknown.
 
 ## Duplicate and alias decisions
 ### Candidate decisions
-- Candidate airpad-la-praille: matched -> airpad-la-praille (The current operator page says La Praille has three terrains. The raw candidate file supplied two; that historical candidate value is preserved in data/candidates.json and is superseded by the current official count. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
-- Candidate airpad-les-acacias: matched -> airpad-les-acacias (The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
-- Candidate airpad-meyrin: matched -> airpad-meyrin (The operator confirms the site, address, court count, and reservation route. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
-- Candidate airpad-plan-les-ouates: matched -> airpad-plan-les-ouates (The operator confirms this as a separate AIRPAD site. Cover, access restrictions, rentals, lockers, and account requirements are unknown.)
-- Candidate asphalte-jonction: matched -> asphalte-jonction (The checked current City page says two covered padel courts, public paid online reservation, and seasonal operation. The regional directory independently says two courts and supplies a street address. The supplied one-court candidate value is not treated as source evidence, so no official-versus-directory court-count contradiction remains. The public Padel Connect grid is directly available at the verified Matchpoint URL.)
+- Candidate airpad-la-praille: matched -> airpad-la-praille (The current operator page says La Praille has three terrains and describes AIRPAD's courts as indoor; the user confirms La Praille is indoor. The raw candidate file supplied two; that historical candidate value is preserved in data/candidates.json and is superseded by the current official count. Access restrictions, rentals, lockers, and account requirements are unknown.)
+- Candidate airpad-les-acacias: matched -> airpad-les-acacias (The AIRPAD public reservation card labels court 3 at Les Acacias 'Extérieur'; this site-specific booking label supports outdoor classification over the operator page's generic indoor heading. Access restrictions, rentals, lockers, and account requirements remain unknown.)
+- Candidate airpad-meyrin: matched -> airpad-meyrin (The user reports that the AIRPAD reservation card for Meyrin labels its court 'Extérieur'. The operator's general page uses an indoor heading without distinguishing locations; the site-specific label is retained with probable confidence. Access restrictions, rentals, lockers, and account requirements remain unknown.)
+- Candidate airpad-plan-les-ouates: matched -> airpad-plan-les-ouates (AIRPAD lists this site at Chemin du Pont-du-Centenaire 78; the commune identifies its two covered courts as the Centre sportif des Cherpines and links AIRPAD booking. The two source candidates are merged into one location. Public access, racket-rental boxes, and limited locker-room hours are confirmed; membership and account requirements are unknown.)
+- Candidate asphalte-jonction: matched -> asphalte-jonction (The current City page confirms two covered padel courts under halls 2 and 3, with seasonal operation from 5 June to 25 October in 2026. Coverage is recorded as partially covered; seasonal operation is preserved here. The regional directory supplies a street address, and the public Padel Connect grid is directly available at the verified Matchpoint URL.)
 - Candidate bernex: unresolved -> bernex (The regional-directory address, court count, and cover facts remain probable. Current Padel Academy and public Matchpoint pages confirm Padel Connect booking; access, membership, rental, and locker facts are not verified in this record.)
-- Candidate cherpines: matched -> cherpines (The commune supports the court count, public access, reservation, equipment rental, and locker-room information. The page does not provide a street address, cover classification, membership rule, or account requirement.)
+- Candidate cherpines: duplicate -> airpad-plan-les-ouates (AIRPAD lists this site at Chemin du Pont-du-Centenaire 78; the commune identifies its two covered courts as the Centre sportif des Cherpines and links AIRPAD booking. The two source candidates are merged into one location. Public access, racket-rental boxes, and limited locker-room hours are confirmed; membership and account requirements are unknown.)
 - Candidate collonge-bellerive: matched -> collonge-bellerive (Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but current club identity, access, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate cologny: matched -> cologny (Only regional directory address, court, and cover facts are retained. The public Plugin.ch diary is visible, but access, group conditions, and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate crans-vd: matched -> crans-vd (The checked directory supports only the Crans address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. Rentals and locker details remain unknown.)
@@ -522,12 +507,12 @@
 - Candidate drizia-miremont: unresolved -> drizia-miremont (The checked directory supports only the Drizia-Miremont address and court facts. The public Plugin.ch diary is visible, but access, account and membership requirements for booking remain unknown; public availability does not establish anonymous booking. The supplied Bout-du-Monde wording remains in the canonical name for traceability, not as a confirmed alias.)
 - Candidate ehl-padel-club: matched -> ehl-padel-club (The checked directory supports only the address, two-court count, and outdoor classification. Campus eligibility, access, booking, rentals, lockers, and account requirements are unknown.)
 - Candidate evaux: matched -> evaux (The foundation supports the address, three outdoor courts, public reservation, equipment rental, changing facilities, and Padel Connect account requirement. The public Padel Connect grid is directly available at the verified Matchpoint URL; an account remains required for booking.)
-- Candidate everness: matched -> everness (The official page supports the venue address, online-only booking, and free racket rental. It does not state court count, cover, locker rooms, membership, account requirement, or booking platform; those fields are unknown.)
+- Candidate everness: matched -> everness (The official page supports the venue address, online-only booking, and free racket rental. PadelCompass \(updated 9 August 2026\) lists three outdoor doubles courts, consistent with the operator's 2023 outdoor-court announcement. Court cover is recorded as outdoor with probable confidence; locker rooms, membership, and account requirement remain unknown.)
 - Candidate fraisiers: unresolved -> fraisiers (The regional directory supports only the address, one-court count, and outdoor classification. The public Plugin.ch diary is visible, but access, booking, account and membership requirements, and alias identity remain unknown; public availability does not establish anonymous booking. Landagora's 2023 cession notice and the lack of current operator confirmation remain relevant.)
 - Candidate gland: matched -> gland (The supplied label is retained as the canonical name; the checked directory supports only the Gland address, court count, and indoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
-- Candidate green-club: matched -> green-club (Only regional directory address, court grouping, and cover facts are retained. The official page was not successfully fetched in this pass; access and booking are unknown.)
+- Candidate green-club: matched -> green-club (The official page confirms four courts but shows a covered-courts pictogram without detailing how many are indoor versus outdoor. Padelhike lists two indoor and two outdoor doubles courts. Keep overall cover unknown until the club's split can be confirmed; access and booking are also unknown.)
 - Candidate gva-palexpo: unresolved -> gva-palexpo (The operator's current 2026 page wins the three-versus-two court conflict and establishes seasonal operation. The regional two-court observation remains as explicit contradictory evidence. Access, membership, rental, locker, and account requirements are unknown.)
-- Candidate maisonnex: matched -> maisonnex (The former Meyrin commune URL returned 404 and is removed. The live Bookinea portal confirms a current Maisonnex-related padel reservation route, Padel 90 minutes at CHF 60.00, a CHF 15.00 guest padel ticket, and conditional guest access, but does not state the court count, address, cover, rentals, or locker-room facts. The record is therefore probable.)
+- Candidate maisonnex: matched -> maisonnex (The Commune of Meyrin confirms three covered courts at Maisonnex, opened on 1 April 2026, and says they are usable year-round without rain exposure. The live Bookinea portal supports the reservation, price, and conditional guest-access facts; rentals and locker-room details remain unknown. The record is therefore probable.)
 - Candidate mies-tannay: matched -> mies-tannay (The supplied Mies-Tannay wording is retained as the canonical name; the checked directory supports only the Mies address, court count, and outdoor classification. The public Plugin.ch diary is visible, but access and account and membership requirements for booking remain unknown; public availability does not establish anonymous booking.)
 - Candidate padel-one-echandens: matched -> padel-one-echandens (The operator supports the address, doubles/single court grouping, reservation route, and changing facilities. Access, membership, racket rental, and account requirements are unknown.)
 - Candidate padel-parc-etoy: matched -> padel-parc-etoy (The operator supports the address, three indoor courts, Playtomic booking, equipment rental, and changing rooms. Access, membership, and account requirements are unknown.)
@@ -538,37 +523,37 @@
 - Candidate vernier: matched -> vernier (The commune confirms the named facility and address, while its current reservation page confirms two outdoor courts, online reservation and payment, and CHF 48.– for 1h30 through Padel First. Doubles format remains a probable directory-only fact; access, account, rental, locker, and alias details are unknown.)
 ### Aliases
 - L'Asphalte / Pointe de la Jonction \(Genève\) aliases: L'Asphalte, Pointe de la Jonction
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\) aliases: Centre sportif des Cherpines
 
 ## Missing or unknown facts
 Unknown values are rendered as `Inconnu`.
 - David Lloyd Country Club Geneva \(Bellevue\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Court de padel / TC Bernex \(Bernex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- Everness \(Chavannes-de-Bogis\): access_kind, booking_account_required, booking_platform, brand, court_groups, locker_rooms, membership_required, overall_cover_status
+- Everness \(Chavannes-de-Bogis\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required
 - Padel Station \(Chêne-Bourg\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - Padel de Collonge-Bellerive \(Collonge-Bellerive\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Centre sportif de Cologny \(Cologny\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Tennis Padel Crans VD \(Crans-près-Céligny\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Padel One Echandens \(Echandens\): access_kind, booking_account_required, brand, membership_required, racket_rental
 - Padel Parc Etoy \(Etoy\): access_kind, booking_account_required, brand, membership_required
-- AIRPAD Les Acacias \(Genève\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
+- AIRPAD Les Acacias \(Genève\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, public_booking, racket_rental
 - CSU Champel \(Genève\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Drizia-Miremont / Bout-du-Monde \(Genève\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - L'Asphalte / Pointe de la Jonction \(Genève\): booking_account_required, brand, locker_rooms, membership_required, racket_rental
 - Padel Tennis Gland \(Gland\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - GVA Padel / Palexpo \(Grand-Saconnex\): access_kind, booking_account_required, brand, locker_rooms, membership_required, racket_rental
-- AIRPAD La Praille \(Lancy\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
+- AIRPAD La Praille \(Lancy\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, public_booking, racket_rental
 - Padel REDSPORT-LANDAGORA / TC Fraisiers \(Lancy\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - EHL Padel Club \(Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Urban Padel Lausanne \(Lausanne\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
-- AIRPAD Meyrin \(Meyrin\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
-- Centre sportif de Maisonnex \(Meyrin\): address, booking_account_required, brand, court_groups, locker_rooms, membership_required, official_url, overall_cover_status, racket_rental
+- AIRPAD Meyrin \(Meyrin\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, public_booking, racket_rental
+- Centre sportif de Maisonnex \(Meyrin\): address, booking_account_required, brand, locker_rooms, membership_required, official_url, racket_rental
 - Tennis Club Mies-Tannay \(Mies\): access_kind, booking_account_required, brand, locker_rooms, membership_required, official_url, public_booking, racket_rental
 - Padel des Evaux \(Onex\): brand, membership_required
-- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
-- Centre sportif des Cherpines \(Plan-les-Ouates\): address, booking_account_required, brand, membership_required, overall_cover_status
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): booking_account_required, brand, membership_required
 - Vaudoise aréna \(Prilly\): access_kind, address, booking_account_required, brand, locker_rooms, membership_required
 - Padel Parc Préverenges \(Préverenges\): access_kind, booking_account_required, brand, membership_required
-- Green Club \(Romanel-sur-Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, official_url, overall_cover_status, public_booking, racket_rental
+- Green Club \(Romanel-sur-Lausanne\): access_kind, booking_account_required, booking_platform, booking_url, brand, locker_rooms, membership_required, overall_cover_status, public_booking, racket_rental
 - Tennis, badminton et padel de Vernier \(Vernier\): access_kind, booking_account_required, booking_platform, brand, locker_rooms, membership_required, racket_rental
 
 ## Source evidence and contradictions
@@ -583,13 +568,21 @@ Unknown values are rendered as `Inconnu`.
 - Everness \(Chavannes-de-Bogis\): [PADEL – everness](<https://everness.ch/fr/padel/>) — location.official\_url — supports; The operator page identifies Everness padel. (vérifié: 2026-09-21T00:00:00Z)
 - Everness \(Chavannes-de-Bogis\): [PADEL – everness](<https://everness.ch/fr/padel/>) — location.public\_booking — supports; The operator says reservations are online only and links its court reservation page. (vérifié: 2026-09-21T00:00:00Z)
 - Everness \(Chavannes-de-Bogis\): [PADEL – everness](<https://everness.ch/fr/padel/>) — location.racket\_rental — supports; The operator says racket rental is free. (vérifié: 2026-09-21T00:00:00Z)
+- Green Club \(Romanel-sur-Lausanne\): [Padel à Romanel-sur-Lausanne \| Green Club](<https://green-club.ch/squash-padel-bad/padel>) — location.courts — supports; The club's official padel page confirms four courts. (vérifié: 2026-10-01T00:00:00Z)
+- Green Club \(Romanel-sur-Lausanne\): [Padel à Romanel-sur-Lausanne \| Green Club](<https://green-club.ch/squash-padel-bad/padel>) — location.cover\_status — contradicts; The official page displays a covered-courts pictogram beside the four-court total, without explaining whether all courts or only some courts are covered; the regional directory identifies two indoor and two outdoor courts. (vérifié: 2026-10-01T00:00:00Z)
+- Green Club \(Romanel-sur-Lausanne\): [Padel à Romanel-sur-Lausanne \| Green Club](<https://green-club.ch/squash-padel-bad/padel>) — location.official\_url — supports; The club's official padel page identifies its padel service. (vérifié: 2026-10-01T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.address — supports; The operator gives Palexpo Halle 5, Route François-Peyrot 30, 1218 Le Grand-Saconnex. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.courts — supports; The operator says three padel courts were installed in Palexpo Halle 5 for July-September 2026. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.cover\_status — supports; The operator describes the courts as a seasonal installation in Palexpo Halle 5. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.municipality — supports; The operator identifies the Palexpo venue in Grand-Saconnex. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.official\_url — supports; The operator page identifies GVA Padel. (vérifié: 2026-09-21T00:00:00Z)
 - GVA Padel / Palexpo \(Grand-Saconnex\): [GVA Padel - Tennis Padel à Genève](<https://gvapadel.ch/>) — location.public\_booking — supports; The operator provides a Playtomic booking route. (vérifié: 2026-09-21T00:00:00Z)
+- Centre sportif de Maisonnex \(Meyrin\): [Padel : trois nouveaux terrains à Meyrin \| Commune de Meyrin](<https://meyrin.ch/fr/actualites/padel-trois-nouveaux-terrains-prets-accueillir-les-joueurs>) — location.courts — supports; The commune says three padel courts opened at the Centre sportif de Maisonnex on 1 April 2026. (vérifié: 2026-10-01T00:00:00Z)
+- Centre sportif de Maisonnex \(Meyrin\): [Padel : trois nouveaux terrains à Meyrin \| Commune de Meyrin](<https://meyrin.ch/fr/actualites/padel-trois-nouveaux-terrains-prets-accueillir-les-joueurs>) — location.cover\_status — supports; The commune identifies these as covered courts that can be played year-round without rain exposure. (vérifié: 2026-10-01T00:00:00Z)
 - Everness \(Chavannes-de-Bogis\): [Everness padel reservations](<https://padel.everness.ch/>) — location.booking\_url — supports; The operator's linked reservation page is padel.everness.ch. (vérifié: 2026-09-21T00:00:00Z)
+- Everness \(Chavannes-de-Bogis\): [Padel Arena Everness – PadelCompass](<https://padelcompass.de/en/courts/switzerland/chavannes-de-bogis/padel-arena-everness-chavannes-de-bogis>) — location.court\_format — supports; The directory describes the three courts as standard doubles courts. (vérifié: 2026-10-01T00:00:00Z)
+- Everness \(Chavannes-de-Bogis\): [Padel Arena Everness – PadelCompass](<https://padelcompass.de/en/courts/switzerland/chavannes-de-bogis/padel-arena-everness-chavannes-de-bogis>) — location.courts — supports; The directory, last updated 9 August 2026, lists three standard outdoor doubles courts. (vérifié: 2026-10-01T00:00:00Z)
+- Everness \(Chavannes-de-Bogis\): [Padel Arena Everness – PadelCompass](<https://padelcompass.de/en/courts/switzerland/chavannes-de-bogis/padel-arena-everness-chavannes-de-bogis>) — location.cover\_status — supports; The directory, last updated 9 August 2026, describes the three courts as outdoor. (vérifié: 2026-10-01T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx>) — location.booking\_url — supports; The public Matchpoint tenant displays the Bernex booking grid with Terrain Bleu and Terrain Vert. (vérifié: 2026-09-25T00:00:00Z)
 - Padel des Evaux \(Onex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8>) — location.booking\_platform — supports; The public grid is served by the Padel Connect Matchpoint tenant. (vérifié: 2026-09-26T00:00:00Z)
 - Padel des Evaux \(Onex\): [Padel Connect public booking grid](<https://padelgeneva.matchpoint.com.es/Booking/Grid.aspx?id=8>) — location.booking\_url — supports; The public Matchpoint tenant displays the Parc des Evaux booking grid with Evaux 1, Evaux 2, and Evaux 3. (vérifié: 2026-09-26T00:00:00Z)
@@ -745,6 +738,9 @@ Unknown values are rendered as `Inconnu`.
 - AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Terrains de Padel à Genève — Airpad](<https://www.airpad.ch/airpad>) — location.courts — supports; The operator lists courts 6 and 7 for Plan-les-Ouates. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Meyrin \(Meyrin\): [Terrains de Padel à Genève — Airpad](<https://www.airpad.ch/airpad>) — location.courts — supports; The operator lists one court for Meyrin. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Les Acacias \(Genève\): [Terrains de Padel à Genève — Airpad](<https://www.airpad.ch/airpad>) — location.courts — supports; The operator lists two courts for Les Acacias. (vérifié: 2026-09-21T00:00:00Z)
+- AIRPAD Les Acacias \(Genève\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.cover\_status — contradicts; The operator page describes AIRPAD as offering 'Les courts indoor de Genève' but does not specify coverage by location; this conflicts with the user's site-specific report that Les Acacias is outdoor. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Meyrin \(Meyrin\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.cover\_status — contradicts; The operator page describes AIRPAD as offering 'Les courts indoor de Genève' but does not specify coverage by location; this conflicts with the user's site-specific report that Meyrin is outdoor. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD La Praille \(Lancy\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.cover\_status — supports; The operator's current page describes AIRPAD as offering 'Les courts indoor de Genève'; the user also identifies La Praille as indoor. (vérifié: 2026-10-01T00:00:00Z)
 - AIRPAD La Praille \(Lancy\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.duration — supports; The operator publishes booking durations of 60, 90, and 120 minutes for its standard and off-peak padel tariffs. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Les Acacias \(Genève\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.duration — supports; The operator publishes booking durations of 60, 90, and 120 minutes for its standard and off-peak padel tariffs. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Meyrin \(Meyrin\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.duration — supports; The operator publishes booking durations of 60, 90, and 120 minutes for its standard and off-peak padel tariffs. (vérifié: 2026-09-21T00:00:00Z)
@@ -757,12 +753,12 @@ Unknown values are rendered as `Inconnu`.
 - AIRPAD Les Acacias \(Genève\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.price — supports; The operator publishes standard prices of CHF 13 for 60 minutes, CHF 15 for 90 minutes, and CHF 18 for 120 minutes, plus off-peak prices of CHF 8, CHF 10, and CHF 13 for those durations. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Meyrin \(Meyrin\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.price — supports; The operator publishes standard prices of CHF 13 for 60 minutes, CHF 15 for 90 minutes, and CHF 18 for 120 minutes, plus off-peak prices of CHF 8, CHF 10, and CHF 13 for those durations. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>) — location.price — supports; The operator publishes standard prices of CHF 13 for 60 minutes, CHF 15 for 90 minutes, and CHF 18 for 120 minutes, plus off-peak prices of CHF 8, CHF 10, and CHF 13 for those durations. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_platform — supports; The linked reservation service is AIRPAD. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_url — supports; The commune's reservation link points to AIRPAD. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD La Praille \(Lancy\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_url — supports; The operator provides a public reservation page for AIRPAD courts. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Les Acacias \(Genève\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_url — supports; The operator provides a public reservation page for AIRPAD courts. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Meyrin \(Meyrin\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_url — supports; The operator provides a public reservation page for AIRPAD courts. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.booking\_url — supports; The operator provides a public reservation page for AIRPAD courts. (vérifié: 2026-09-21T00:00:00Z)
+- AIRPAD Les Acacias \(Genève\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.cover\_status — supports; The public booking card shown for court 3 at Les Acacias is labelled 'LES ACACIAS - Extérieur'. (vérifié: 2026-10-02T00:00:00Z)
+- AIRPAD Meyrin \(Meyrin\): [User-reported AIRPAD reservation label](<https://www.airpad.ch/reserve>) — location.cover\_status — supports; The user reports that the AIRPAD reservation card for Meyrin labels its court 'Extérieur'. (vérifié: 2026-10-02T00:00:00Z)
 - AIRPAD La Praille \(Lancy\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.official\_url — supports; The operator page identifies the AIRPAD service and links the public reservation route. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Les Acacias \(Genève\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.official\_url — supports; The operator page identifies the AIRPAD service and links the public reservation route. (vérifié: 2026-09-21T00:00:00Z)
 - AIRPAD Meyrin \(Meyrin\): [AIRPAD reservation](<https://www.airpad.ch/reserve>) — location.official\_url — supports; The operator page identifies the AIRPAD service and links the public reservation route. (vérifié: 2026-09-21T00:00:00Z)
@@ -780,9 +776,10 @@ Unknown values are rendered as `Inconnu`.
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.aliases — supports; The official page title names L'Asphalte and identifies the site as Pointe de la Jonction. (vérifié: 2026-09-21T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.booking\_url — supports; The City page links the Padel Academy site for online reservation. (vérifié: 2026-09-21T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.courts — supports; The City page says the padel area contains two courts. (vérifié: 2026-09-21T00:00:00Z)
-- L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.cover\_status — supports; The City page places the temporary sports centre under the Jonction halls and says it operates during the belle saison. (vérifié: 2026-09-21T00:00:00Z)
+- L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.cover\_status — supports; The City says the two padel courts are among the covered installations under halls 2 and 3; the centre operates seasonally, from 5 June to 25 October in 2026. (vérifié: 2026-10-01T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.official\_url — supports; The City page is the current official page for L'Asphalte. (vérifié: 2026-09-21T00:00:00Z)
 - L'Asphalte / Pointe de la Jonction \(Genève\): [L'Asphalte \| Ville de Genève](<https://www.geneve.ch/asphalte>) — location.public\_booking — supports; The City page says padel is paid and available by online reservation. (vérifié: 2026-09-21T00:00:00Z)
+- Everness \(Chavannes-de-Bogis\): [My Everness \| Padel Arena Everness](<https://www.instagram.com/p/CxdKPQEIrwN/>) — location.cover\_status — supports; The operator's 2023 announcement describes three outdoor courts at Everness. (vérifié: 2026-10-01T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [TC Bernex \| Padel Academy](<https://www.padel-academy.ch/bernex>) — location.booking\_platform — supports; The official Bernex page names Padel Connect as the court reservation service. (vérifié: 2026-09-25T00:00:00Z)
 - Court de padel / TC Bernex \(Bernex\): [TC Bernex \| Padel Academy](<https://www.padel-academy.ch/bernex>) — location.booking\_url — supports; The official Padel Academy Bernex page directs court reservations to Padel Connect. (vérifié: 2026-09-25T00:00:00Z)
 - Padel One Echandens \(Echandens\): [Jouer \| Padel One](<https://www.padel-one.ch/jouer>) — location.booking\_platform — supports; The operator identifies Padel One CH as the booking service. (vérifié: 2026-09-21T00:00:00Z)
@@ -798,13 +795,14 @@ Unknown values are rendered as `Inconnu`.
 - Padel des Evaux \(Onex\): [Padel Connect](<https://www.padelconnect.ch/>) — location.booking\_account\_required — supports; Padel Connect's public instructions require an account for reservations. (vérifié: 2026-09-21T00:00:00Z)
 - Padel des Evaux \(Onex\): [Padel Connect](<https://www.padelconnect.ch/>) — location.booking\_platform — supports; Padel Connect is the named reservation platform. (vérifié: 2026-09-21T00:00:00Z)
 - Padel des Evaux \(Onex\): [Padel Connect](<https://www.padelconnect.ch/>) — location.booking\_url — supports; The foundation directs users to Padel Connect for reservations. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.access\_kind — supports; The commune presents the courts as a public sports installation. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.courts — supports; The commune lists two padel courts at the Centre sportif des Cherpines. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.locker\_rooms — supports; The commune publishes limited public locker-room hours for the installation. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.municipality — supports; The commune page identifies the Cherpines facility in Plan-les-Ouates. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.official\_url — supports; The commune page identifies the Cherpines padel installation. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.public\_booking — supports; The commune links AIRPAD reservation for the Cherpines courts. (vérifié: 2026-09-21T00:00:00Z)
-- Centre sportif des Cherpines \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.racket\_rental — supports; The commune lists equipment rental boxes. (vérifié: 2026-09-21T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.access\_kind — supports; The commune presents the Cherpines courts as a public sports installation. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.aliases — supports; The commune identifies the AIRPAD courts at Chemin du Pont-du-Centenaire 78 as the Centre sportif des Cherpines. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.booking\_platform — supports; The commune links AIRPAD as the booking service for the Cherpines courts. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.courts — supports; The commune lists two padel courts at the Centre sportif des Cherpines. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.cover\_status — supports; The commune states that two covered padel courts are available at the Centre sportif des Cherpines. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.locker\_rooms — supports; The commune publishes limited public locker-room hours for the installation. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.public\_booking — supports; The commune links AIRPAD reservations for the Cherpines courts. (vérifié: 2026-10-01T00:00:00Z)
+- AIRPAD Plan-les-Ouates \(Plan-les-Ouates\): [Padel \| Plan-les-Ouates](<https://www.plan-les-ouates.ch/pages/que-faire-a-plan-les-ouates/envie-de-sport/installations-sportives/padel>) — location.racket\_rental — supports; The commune lists equipment rental boxes. (vérifié: 2026-10-01T00:00:00Z)
 - Tennis, badminton et padel de Vernier \(Vernier\): [Tennis, badminton et padel de Vernier \| Ville de Vernier](<https://www.vernier.ch/lieux/tennis-badminton-et-padel-de-vernier>) — location.address — supports; The commune lists the facility at Via Monnet 10, 1214 Vernier. (vérifié: 2026-09-21T00:00:00Z)
 - Tennis, badminton et padel de Vernier \(Vernier\): [Tennis, badminton et padel de Vernier \| Ville de Vernier](<https://www.vernier.ch/lieux/tennis-badminton-et-padel-de-vernier>) — location.municipality — supports; The commune identifies the facility in Vernier. (vérifié: 2026-09-21T00:00:00Z)
 - Tennis, badminton et padel de Vernier \(Vernier\): [Tennis, badminton et padel de Vernier \| Ville de Vernier](<https://www.vernier.ch/lieux/tennis-badminton-et-padel-de-vernier>) — location.official\_url — supports; The commune facility page identifies the named venue. (vérifié: 2026-09-21T00:00:00Z)
@@ -815,4 +813,7 @@ Unknown values are rendered as `Inconnu`.
 - Tennis, badminton et padel de Vernier \(Vernier\): [Courts de padel - réservations \| Ville de Vernier](<https://www.vernier.ch/vie-pratique/demarches/courts-de-padel-reservations>) — location.price — supports; The page publishes a unique tariff of CHF 48.– / 1h30. (vérifié: 2026-09-21T00:00:00Z)
 - Tennis, badminton et padel de Vernier \(Vernier\): [Courts de padel - réservations \| Ville de Vernier](<https://www.vernier.ch/vie-pratique/demarches/courts-de-padel-reservations>) — location.public\_booking — supports; The official reservation page states that reservation and payment are online only. (vérifié: 2026-09-21T00:00:00Z)
 ### Warnings and contradictions
+- Green Club \(Romanel-sur-Lausanne\): location.cover\_status via [Padel à Romanel-sur-Lausanne \| Green Club](<https://green-club.ch/squash-padel-bad/padel>): The official page displays a covered-courts pictogram beside the four-court total, without explaining whether all courts or only some courts are covered; the regional directory identifies two indoor and two outdoor courts.
 - GVA Padel / Palexpo \(Grand-Saconnex\): location.courts via [GVA Padel · padelhike](<https://padelhike.ch/en/clubs/gva-padel>): The regional directory lists two indoor courts at the same Palexpo address, conflicting with the operator's current three-court statement.
+- AIRPAD Les Acacias \(Genève\): location.cover\_status via [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>): The operator page describes AIRPAD as offering 'Les courts indoor de Genève' but does not specify coverage by location; this conflicts with the user's site-specific report that Les Acacias is outdoor.
+- AIRPAD Meyrin \(Meyrin\): location.cover\_status via [Découvrez Airpad Genève : Padel et Terrains Full-Panoramiques — Airpad](<https://www.airpad.ch/airpad>): The operator page describes AIRPAD as offering 'Les courts indoor de Genève' but does not specify coverage by location; this conflicts with the user's site-specific report that Meyrin is outdoor.

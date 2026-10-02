@@ -205,6 +205,25 @@ def test_homepage_is_served(tmp_path: Path) -> None:
     assert response.status_code == 200
 
 
+def test_vertical_spacing_stays_compact_across_viewports(
+    browser_page: Page, web_server: str
+) -> None:
+    browser_page.goto(web_server)
+
+    for width, intro_limit in ((1440, 32), (375, 20)):
+        browser_page.set_viewport_size({"width": width, "height": 900})
+        gaps = browser_page.evaluate(
+            """() => ({
+                intro: parseFloat(getComputedStyle(document.querySelector('.intro')).marginBottom),
+                heading: parseFloat(getComputedStyle(document.querySelector('.results-heading')).marginBottom),
+                section: parseFloat(getComputedStyle(document.querySelector('.result-section')).marginBottom),
+            })"""
+        )
+        assert gaps["intro"] <= intro_limit
+        assert gaps["heading"] <= 16
+        assert gaps["section"] <= 24
+
+
 def test_evening_search_keeps_statuses_and_local_club_selection(
     browser_page: Page, web_server: str
 ) -> None:

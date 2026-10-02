@@ -223,7 +223,7 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
     locations = load_locations(Path("data/verified_locations.json"))
 
     validate_verified_catalog(candidates, locations)
-    assert len(locations) == 29
+    assert len(locations) == 28
     assigned = [candidate_id for location in locations for candidate_id in location.candidate_ids]
     assert len(assigned) == len(set(assigned)) == 29
     assert set(assigned) == {entry.candidate_id for entry in candidates}
@@ -232,13 +232,44 @@ def test_supplied_verified_catalog_accounts_for_all_candidates() -> None:
         "probable",
         "to_verify",
     }
-    assert sum(location.verification_status == "confirmed" for location in locations) == 13
+    assert sum(location.verification_status == "confirmed" for location in locations) == 12
     assert sum(location.verification_status == "probable" for location in locations) == 3
     assert sum(location.verification_status == "to_verify" for location in locations) == 13
     assert {
         location.location_id for location in locations if location.verification_status == "probable"
     } == {"asphalte-jonction", "maisonnex", "vernier"}
     assert all(location.evidence for location in locations)
+    locations_by_id = {location.location_id: location for location in locations}
+    assert "cherpines" not in locations_by_id
+    airpad_plan_les_ouates = locations_by_id["airpad-plan-les-ouates"]
+    assert set(airpad_plan_les_ouates.candidate_ids) == {
+        "airpad-plan-les-ouates",
+        "cherpines",
+    }
+    assert "Centre sportif des Cherpines" in airpad_plan_les_ouates.aliases
+    assert airpad_plan_les_ouates.access_kind == "public"
+    assert airpad_plan_les_ouates.public_booking == "yes"
+    assert airpad_plan_les_ouates.racket_rental == "yes"
+    assert airpad_plan_les_ouates.locker_rooms == "yes"
+    airpad_les_acacias = locations_by_id["airpad-les-acacias"]
+    assert airpad_les_acacias.overall_cover_status == "outdoor"
+    assert any(
+        item.url == "https://www.airpad.ch/reserve"
+        and item.fact_key == "location.cover_status"
+        and item.relation == "supports"
+        and "LES ACACIAS - Extérieur" in item.evidence
+        for item in airpad_les_acacias.evidence
+    )
+    airpad_meyrin = locations_by_id["airpad-meyrin"]
+    assert airpad_meyrin.overall_cover_status == "outdoor"
+    assert any(
+        item.source_type == "user_report"
+        and item.fact_key == "location.cover_status"
+        and item.relation == "supports"
+        and "Meyrin" in item.evidence
+        and "Extérieur" in item.evidence
+        for item in airpad_meyrin.evidence
+    )
 
     for location in locations:
         fact_keys = {item.fact_key for item in location.evidence if item.relation == "supports"}

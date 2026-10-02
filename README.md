@@ -38,7 +38,7 @@ Initialize and build the local catalog:
 ```bash
 uv run padel-availability init-db --database var/catalog.sqlite3
 uv run padel-availability import-candidates --database var/catalog.sqlite3 --input data/candidates.json
-uv run padel-availability build-catalog --database var/catalog.sqlite3 --candidates data/candidates.json --verified data/verified_locations.json --run-id inventory-2026-09-21
+uv run padel-availability build-catalog --database var/catalog.sqlite3 --candidates data/candidates.json --verified data/verified_locations.json --run-id inventory-2026-10-02
 ```
 
 Regenerate the tracked Markdown report:
@@ -269,7 +269,8 @@ page and is read-only, sequential, and manual. It does not book courts, use
 credentials, or run in the background. Browser state is ephemeral and is not
 saved between runs. CAPTCHA or login pages become explicit `error` outcomes;
 they are not bypassed. This activation includes exactly the four AIRPAD sites
-in `data/airpad_sources.json`; `cherpines` is explicitly excluded. Each
+in `data/airpad_sources.json`. The Cherpines candidate is merged into the
+AIRPAD Plan-les-Ouates location and is not collected as a separate site. Each
 outcome is persisted locally, and an `error` or `unavailable` outcome keeps the
 previous successful snapshot as stale rather than replacing its slots.
 

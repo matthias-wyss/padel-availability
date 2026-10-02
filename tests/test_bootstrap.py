@@ -45,7 +45,7 @@ def test_catalog_bootstrap_builds_new_catalog_and_refuses_second_run(tmp_path: P
 
     connection = sqlite3.connect(database_path)
     try:
-        assert connection.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == 29
+        assert connection.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == 28
         assert connection.execute("SELECT COUNT(*) FROM availability_runs").fetchone()[0] == 0
     finally:
         connection.close()

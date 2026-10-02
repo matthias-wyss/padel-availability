@@ -282,7 +282,7 @@ def test_cli_builds_and_reports_from_persisted_database(tmp_path: Path) -> None:
     assert "29" in report
     assert "AIRPAD Les Acacias" in report
     assert json_report["verification_run"]["run_id"] == "inventory-2026-09-21"
-    assert len(json_report["locations"]) == 29
+    assert len(json_report["locations"]) == 28
 
 
 def test_cli_rebuilds_identical_report_for_unchanged_inputs(tmp_path: Path) -> None:
