@@ -212,6 +212,22 @@ def test_vertical_spacing_stays_compact_across_viewports(
 
     for width, intro_limit in ((1440, 32), (375, 20)):
         browser_page.set_viewport_size({"width": width, "height": 900})
+        browser_page.wait_for_function(
+            "(expected) => window.innerWidth === expected.width && "
+            "window.matchMedia('(max-width: 767px)').matches === "
+            "(expected.width <= 767) && "
+            "parseFloat(getComputedStyle(document.querySelector('.intro')).marginBottom) "
+            "<= expected.intro_limit",
+            arg={"width": width, "intro_limit": intro_limit},
+        )
+        viewport = browser_page.evaluate(
+            """() => ({
+                width: window.innerWidth,
+                mobile: window.matchMedia("(max-width: 767px)").matches,
+            })"""
+        )
+        assert viewport["width"] == width
+        assert viewport["mobile"] is (width <= 767)
         gaps = browser_page.evaluate(
             """() => ({
                 intro: parseFloat(getComputedStyle(document.querySelector('.intro')).marginBottom),
@@ -222,6 +238,30 @@ def test_vertical_spacing_stays_compact_across_viewports(
         assert gaps["intro"] <= intro_limit
         assert gaps["heading"] <= 16
         assert gaps["section"] <= 24
+
+
+def test_filter_legend_has_inset_from_fieldset_border(browser_page: Page, web_server: str) -> None:
+    browser_page.goto(web_server)
+
+    for width in (1440, 375):
+        browser_page.set_viewport_size({"width": width, "height": 900})
+        browser_page.wait_for_function(
+            "(width) => window.innerWidth === width && "
+            "window.matchMedia('(max-width: 767px)').matches === (width <= 767)",
+            arg=width,
+        )
+        inset = browser_page.locator(".filter-content fieldset").first.evaluate(
+            """fieldset => {
+                const legend = fieldset.querySelector("legend");
+                const range = document.createRange();
+                range.selectNodeContents(legend);
+                const textTop = range.getBoundingClientRect().top;
+                const fieldsetTop = fieldset.getBoundingClientRect().top;
+                const border = parseFloat(getComputedStyle(fieldset).borderTopWidth);
+                return textTop - fieldsetTop - border;
+            }"""
+        )
+        assert inset >= 8
 
 
 def test_evening_search_keeps_statuses_and_local_club_selection(
